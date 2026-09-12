@@ -61,15 +61,67 @@
         .domain-tag { display: inline-block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); background: #0f172a; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; margin-bottom: 12px; }
 
         .hidden { display: none !important; }
+
+        /* Top-level tabs */
+        .top-tabs { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        .top-tab-btn { background: var(--card-bg); border: 2px solid var(--border); color: var(--text-muted); padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .top-tab-btn:hover { border-color: var(--primary); }
+        .top-tab-btn.active { border-color: var(--primary); color: var(--text-color); background: rgba(59,130,246,0.12); }
+
+        /* CLI Labs menu */
+        .lab-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px; margin-top: 20px; }
+        .lab-card { background: #0f172a; border: 2px solid var(--border); border-radius: 8px; padding: 18px; cursor: pointer; transition: all 0.2s; }
+        .lab-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .lab-card h3 { color: #60a5fa; margin-bottom: 8px; font-size: 1.02rem; }
+        .lab-card p { font-size: 0.85rem; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
+        .lab-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+        .lab-badge { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted); }
+        .lab-badge.diff-Easy { color: #86efac; border-color: #166534; }
+        .lab-badge.diff-Medium { color: #fde68a; border-color: #854d0e; }
+        .lab-badge.diff-Hard { color: #fca5a5; border-color: #7f1d1d; }
+
+        /* Lab workspace */
+        .lab-workspace { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 20px; }
+        @media (max-width: 800px) { .lab-workspace { grid-template-columns: 1fr; } }
+        .lab-sidebar { background: #0f172a; border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+        .lab-sidebar h3 { color: #60a5fa; margin-bottom: 10px; font-size: 1rem; }
+        .lab-sidebar p { font-size: 0.88rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px; }
+        .req-list { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 16px 18px; line-height: 1.6; }
+        .obj-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+        .obj-item { font-size: 0.85rem; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--card-bg); cursor: pointer; }
+        .obj-item.pass { border-color: var(--accent); background: rgba(16,185,129,0.12); color: #86efac; }
+        .obj-item.fail { color: var(--text-muted); }
+        .obj-hint { display: none; margin-top: 6px; font-size: 0.8rem; color: #93c5fd; border-top: 1px dashed var(--border); padding-top: 6px; }
+        .obj-item.show-hint .obj-hint { display: block; }
+        .obj-icon { margin-right: 6px; font-weight: bold; }
+
+        .terminal-panel { background: #0b1120; border: 1px solid var(--border); border-radius: 10px; padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 480px; }
+        .terminal-titlebar { background: #1e293b; padding: 8px 14px; font-size: 0.78rem; color: var(--text-muted); border-bottom: 1px solid var(--border); display:flex; justify-content: space-between; align-items:center; }
+        .terminal-body { flex: 1; overflow-y: auto; padding: 12px 14px; font-family: "SF Mono", Consolas, Monaco, monospace; font-size: 0.85rem; color: #d1fae5; white-space: pre-wrap; word-break: break-word; }
+        .terminal-line-cmd { color: #f8fafc; }
+        .terminal-line-error { color: #fca5a5; }
+        .terminal-input-row { display: flex; align-items: center; border-top: 1px solid var(--border); padding: 8px 14px; font-family: "SF Mono", Consolas, Monaco, monospace; font-size: 0.85rem; }
+        .terminal-prompt { color: #60a5fa; margin-right: 6px; white-space: nowrap; }
+        .terminal-input { flex: 1; background: transparent; border: none; outline: none; color: #f8fafc; font-family: inherit; font-size: inherit; }
+
+        .lab-progress-banner { margin-top: 14px; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; text-align: center; }
+        .lab-progress-banner.incomplete { background: rgba(59,130,246,0.12); color: #93c5fd; border: 1px solid var(--primary); }
+        .lab-progress-banner.complete { background: rgba(16,185,129,0.15); color: #86efac; border: 1px solid var(--accent); }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>CCNA 200-301 Practice Portal</h1>
-            <p>8 full-length practice exams (800 unique questions) &middot; plus a randomized mixed-pool mode &middot; every answer choice explained</p>
+            <p>8 full-length practice exams (800 unique questions) &middot; a randomized mixed-pool mode &middot; and 10 hands-on CLI labs</p>
         </header>
 
+        <div class="top-tabs">
+            <button id="tab-btn-exams" class="top-tab-btn active" onclick="switchTopTab('exams')">📝 Practice Exams</button>
+            <button id="tab-btn-labs" class="top-tab-btn" onclick="switchTopTab('labs')">💻 CLI Labs</button>
+        </div>
+
+        <div id="exams-tab">
         <section id="menu-view" class="card">
             <h2>Select a Practice Exam</h2>
             <p style="color: var(--text-muted); margin-top: 5px;">Each exam is a distinct, blueprint-weighted 100-question bank covering Network Fundamentals, Network Access, IP Connectivity, IP Services, Security Fundamentals, and Automation/Programmability. Every option shows why it's right or wrong.</p>
@@ -146,6 +198,54 @@
                 <button class="btn" onclick="restartCurrentExam()">Retake This Exam</button>
             </div>
         </section>
+        </div><!-- /exams-tab -->
+
+        <div id="labs-tab" class="hidden">
+        <section id="lab-menu-view" class="card">
+            <h2>CLI Practice Labs</h2>
+            <p style="color: var(--text-muted); margin-top: 5px;">A real (simulated) Cisco IOS terminal. Type actual commands — abbreviations work, just like the real CLI. Grading checks the resulting device configuration, not exact command text, so there's more than one valid way to pass each lab.</p>
+            <div id="lab-grid" class="lab-grid"></div>
+        </section>
+
+        <section id="lab-workspace-view" class="card hidden">
+            <div class="quiz-header">
+                <div>
+                    <span id="lab-title-display" style="font-weight: bold; color: #60a5fa;">Lab</span>
+                </div>
+                <button class="btn btn-secondary" onclick="backToLabMenu()">← Back to Labs</button>
+            </div>
+
+            <div class="lab-workspace" style="margin-top: 18px;">
+                <div class="lab-sidebar">
+                    <h3>Scenario</h3>
+                    <p id="lab-scenario-text"></p>
+                    <h3>Requirements</h3>
+                    <ul id="lab-requirements" class="req-list"></ul>
+                    <h3>Objectives <span id="lab-obj-count" style="color: var(--text-muted); font-weight: normal; font-size: 0.8rem;"></span></h3>
+                    <ul id="lab-objectives" class="obj-list"></ul>
+                    <div id="lab-progress-banner" class="lab-progress-banner incomplete">Type commands in the terminal, then click "Check My Work."</div>
+                    <div style="margin-top: 14px; display: flex; gap: 8px;">
+                        <button class="btn" style="flex:1;" onclick="checkLabWork()">✓ Check My Work</button>
+                    </div>
+                    <div style="margin-top: 8px;">
+                        <button class="btn btn-secondary" style="width:100%;" onclick="resetLab()">↺ Reset Lab</button>
+                    </div>
+                </div>
+
+                <div class="terminal-panel">
+                    <div class="terminal-titlebar">
+                        <span id="lab-device-name">Router</span>
+                        <span>simulated IOS terminal</span>
+                    </div>
+                    <div id="terminal-body" class="terminal-body"></div>
+                    <div class="terminal-input-row">
+                        <span id="terminal-prompt" class="terminal-prompt">Router&gt;</span>
+                        <input id="terminal-input" class="terminal-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" onkeydown="handleTerminalKey(event)">
+                    </div>
+                </div>
+            </div>
+        </section>
+        </div><!-- /labs-tab -->
     </div>
 
     <script>
@@ -169,6 +269,1591 @@ const EXAM_8 = [{"q":"Which statement correctly describes the purpose of an Ethe
 
     </script>
     <script>
+// ============================================================
+// CLI Engine — a small Cisco IOS-style command interpreter.
+// Tracks device state (interfaces, VLANs, routes, security,
+// OSPF, etc.) and grades labs against that STATE, not against
+// exact command text — same philosophy as real IOS: many
+// different valid command sequences can reach the same config.
+// ============================================================
+
+const IFACE_ALIASES = {
+  'gigabitethernet': 'GigabitEthernet', 'gigabit': 'GigabitEthernet', 'gig': 'GigabitEthernet', 'gi': 'GigabitEthernet', 'g': 'GigabitEthernet',
+  'fastethernet': 'FastEthernet', 'fast': 'FastEthernet', 'fa': 'FastEthernet', 'f': 'FastEthernet',
+  'ethernet': 'Ethernet', 'eth': 'Ethernet', 'e': 'Ethernet',
+  'serial': 'Serial', 'se': 'Serial', 's': 'Serial',
+  'vlan': 'Vlan', 'vl': 'Vlan',
+  'loopback': 'Loopback', 'loop': 'Loopback', 'lo': 'Loopback',
+  'port-channel': 'Port-channel', 'portchannel': 'Port-channel', 'po': 'Port-channel',
+  'tunnel': 'Tunnel', 'tu': 'Tunnel'
+};
+
+function normalizeIfName(raw) {
+  if (!raw) return null;
+  const m = raw.match(/^([A-Za-z-]+)([\d\/\.]+)$/);
+  if (!m) return null;
+  const alpha = m[1].toLowerCase();
+  const rest = m[2];
+  const canon = IFACE_ALIASES[alpha];
+  if (!canon) return null;
+  return canon + rest;
+}
+
+function tokenize(line) {
+  return line.trim().split(/\s+/).filter(Boolean);
+}
+
+// Does `token` uniquely/plausibly abbreviate `full`? (IOS-style min-length abbreviation)
+function matches(token, full, minLen) {
+  if (!token) return false;
+  token = token.toLowerCase();
+  full = full.toLowerCase();
+  minLen = minLen || 1;
+  return token.length >= minLen && full.startsWith(token);
+}
+
+function freshInterface(kind) {
+  return {
+    kind: kind || 'router', // 'router' | 'switch' | 'logical' | 'tunnel'
+    ip: null, mask: null,
+    shutdown: kind === 'switch' ? false : true,
+    description: null,
+    encapsulation: null, // { vlan, native }
+    switchport: { mode: null, accessVlan: null, trunkAllowed: 'all', nativeVlan: 1 },
+    portSecurity: { enabled: false, maximum: 1, violation: 'shutdown', stickyMac: false },
+    hsrp: null, // { group, ip, priority, preempt, track }
+    portfast: false, bpduguard: false,
+    cdpEnabled: true,
+    natSide: null, // 'inside' | 'outside'
+    ipv6: null, // { address, prefix }
+    ipv6OspfProcess: null, ipv6OspfArea: null,
+    helperAddress: null,
+    channelGroup: null, channelMode: null, // EtherChannel
+    tunnelSource: null, tunnelDestination: null, // GRE
+    aclIn: null, aclOut: null // applied ACL numbers
+  };
+}
+
+function freshState(hostname) {
+  return {
+    hostname: hostname || 'Router',
+    enableSecret: null, enablePassword: null,
+    users: [], // {username, secret, password, privilege}
+    domainName: null, cryptoKeyGenerated: false,
+    bannerMotd: null,
+    lines: {
+      console: { password: null, login: 'none' }, // login: 'none'|'password'|'local'
+      vty: { password: null, login: 'none', transportInput: ['telnet'], accessClass: null }
+    },
+    interfaces: {},
+    vlans: { '1': { name: 'default' } },
+    routes: [], // {network, mask, next, ad?}
+    ospf: null, // {processId, routerId, networks:[{network,wildcard,area}], redistribute:[]}
+    eigrp: null, // {as, networks:[], noAutoSummary:false, redistribute:[]}
+    ospfv3: null, // {processId, routerId}
+    acls: {}, // numbered ACLs: { "10": [{action,...}], "101": [...] }
+    dhcpPools: {}, // { NAME: {network, mask, defaultRouter, dnsServer} }
+    dhcpExcluded: [], // [{start,end}]
+    natStatic: [], // [{local, global}]
+    natOverload: null, // {aclNumber, exitInterface}
+    ipv6UnicastRouting: false,
+    ipv6Routes: [], // [{prefix, next}]
+    stpMode: 'pvst',
+    stpRootVlans: {}, // { "10": "primary"|"secondary" }
+    cdpRun: true,
+    loggingHosts: [],
+    ntpServers: [],
+    aaaNewModel: false,
+    aaaAuthLoginDefault: null,
+    savedToStartup: false
+  };
+}
+
+function ipToInt(ip) {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) return null;
+  return ((parts[0] << 24) >>> 0) + (parts[1] << 16) + (parts[2] << 8) + parts[3];
+}
+
+function isValidIp(ip) { return ipToInt(ip) !== null; }
+
+// ---- The interpreter ----
+// ctx.mode: 'user' | 'priv' | 'config' | 'config-if' | 'config-line' | 'config-router' | 'config-vlan'
+// ctx.curIf / ctx.curLine / ctx.curVlan hold the "current object" for sub-modes.
+function newCtx() { return { mode: 'user', curIf: null, curLine: null, curVlan: null, routerProto: null, curDhcpPool: null }; }
+
+function promptFor(state, ctx) {
+  const h = state.hostname;
+  switch (ctx.mode) {
+    case 'user': return h + '>';
+    case 'priv': return h + '#';
+    case 'config': return h + '(config)#';
+    case 'config-if': return h + '(config-if)#';
+    case 'config-line': return h + '(config-line)#';
+    case 'config-router': return h + '(config-router)#';
+    case 'config-vlan': return h + '(config-vlan)#';
+    case 'config-dhcp': return h + '(dhcp-config)#';
+    default: return h + '>';
+  }
+}
+
+function getOrCreateIf(state, name, kindHint) {
+  if (!state.interfaces[name]) {
+    const kind = name.startsWith('Vlan') || name.startsWith('Loopback') ? 'logical' : (kindHint || 'router');
+    state.interfaces[name] = freshInterface(kind);
+  }
+  return state.interfaces[name];
+}
+
+function synthRunningConfig(state) {
+  const lines = [];
+  lines.push('!');
+  lines.push('hostname ' + state.hostname);
+  lines.push('!');
+  if (state.enableSecret) lines.push('enable secret ' + state.enableSecret);
+  if (state.enablePassword) lines.push('enable password ' + state.enablePassword);
+  state.users.forEach(u => {
+    lines.push('username ' + u.username + (u.privilege ? ' privilege ' + u.privilege : '') +
+      (u.secret ? ' secret ' + u.secret : ' password ' + u.password));
+  });
+  if (state.domainName) lines.push('ip domain-name ' + state.domainName);
+  lines.push('!');
+  Object.keys(state.vlans).forEach(id => {
+    if (id === '1') return;
+    lines.push('vlan ' + id);
+    lines.push(' name ' + state.vlans[id].name);
+  });
+  lines.push('!');
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    lines.push('interface ' + name);
+    if (i.description) lines.push(' description ' + i.description);
+    if (i.encapsulation) lines.push(' encapsulation dot1Q ' + i.encapsulation.vlan + (i.encapsulation.native ? ' native' : ''));
+    if (i.switchport.mode === 'access') {
+      lines.push(' switchport mode access');
+      if (i.switchport.accessVlan) lines.push(' switchport access vlan ' + i.switchport.accessVlan);
+    } else if (i.switchport.mode === 'trunk') {
+      lines.push(' switchport mode trunk');
+      lines.push(' switchport trunk native vlan ' + i.switchport.nativeVlan);
+      lines.push(' switchport trunk allowed vlan ' + (Array.isArray(i.switchport.trunkAllowed) ? i.switchport.trunkAllowed.join(',') : 'all'));
+    }
+    if (i.ip) lines.push(' ip address ' + i.ip + ' ' + i.mask);
+    lines.push(i.shutdown ? ' shutdown' : ' no shutdown');
+    lines.push('!');
+  });
+  if (state.ospf) {
+    lines.push('router ospf ' + state.ospf.processId);
+    if (state.ospf.routerId) lines.push(' router-id ' + state.ospf.routerId);
+    state.ospf.networks.forEach(n => lines.push(' network ' + n.network + ' ' + n.wildcard + ' area ' + n.area));
+    lines.push('!');
+  }
+  state.routes.forEach(r => lines.push('ip route ' + r.network + ' ' + r.mask + ' ' + r.next));
+  lines.push('!');
+  lines.push('line console 0');
+  if (state.lines.console.password) lines.push(' password ' + state.lines.console.password);
+  lines.push(' login' + (state.lines.console.login === 'local' ? ' local' : ''));
+  lines.push('!');
+  lines.push('line vty 0 4');
+  if (state.lines.vty.password) lines.push(' password ' + state.lines.vty.password);
+  lines.push(' login' + (state.lines.vty.login === 'local' ? ' local' : ''));
+  lines.push(' transport input ' + state.lines.vty.transportInput.join(' '));
+  lines.push('!');
+  if (state.bannerMotd) { lines.push('banner motd ^C' + state.bannerMotd + '^C'); lines.push('!'); }
+  lines.push('end');
+  return lines;
+}
+
+function showIpIntBrief(state) {
+  const out = ['Interface                  IP-Address      OK? Method Status                Protocol'];
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    const ip = i.ip || 'unassigned';
+    const status = i.shutdown ? 'administratively down' : (i.ip ? 'up' : 'down');
+    const proto = i.shutdown ? 'down' : (i.ip ? 'up' : 'down');
+    out.push(name.padEnd(27) + ip.padEnd(16) + 'YES manual ' + status.padEnd(22) + proto);
+  });
+  return out;
+}
+
+function showVlanBrief(state) {
+  const out = ['VLAN Name                             Status    Ports'];
+  Object.keys(state.vlans).forEach(id => {
+    const ports = Object.keys(state.interfaces).filter(n => {
+      const i = state.interfaces[n];
+      return i.switchport.mode === 'access' && String(i.switchport.accessVlan) === id;
+    });
+    out.push(id.padEnd(5) + state.vlans[id].name.padEnd(33) + 'active    ' + ports.join(', '));
+  });
+  return out;
+}
+
+function showIpRoute(state) {
+  const out = ['Codes: C - connected, S - static, O - OSPF', ' '];
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    if (i.ip && !i.shutdown) out.push('C    ' + i.ip + '/' + i.mask + ' is directly connected, ' + name);
+  });
+  state.routes.forEach(r => {
+    out.push((r.network === '0.0.0.0' ? 'S*   0.0.0.0/0' : 'S    ' + r.network + '/' + r.mask) + ' [1/0] via ' + r.next);
+  });
+  if (state.ospf) {
+    state.ospf.networks.forEach(n => out.push('O    ' + n.network + ' [110/2] via OSPF area ' + n.area));
+  }
+  return out;
+}
+
+function showInterfacesTrunk(state) {
+  const out = ['Port        Mode         Encapsulation  Status        Native vlan'];
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    if (i.switchport.mode === 'trunk') {
+      out.push(name.padEnd(12) + 'on'.padEnd(13) + '802.1q'.padEnd(15) + (i.shutdown ? 'not-trunking' : 'trunking').padEnd(14) + i.switchport.nativeVlan);
+    }
+  });
+  return out;
+}
+
+// Returns { output: string[], illegal?: true }
+function runCommand(state, ctx, rawLine) {
+  const line = rawLine.replace(/\s+/g, ' ').trim();
+  if (line === '') return { output: [] };
+
+  // "do <priv command>" works from any config-level submode
+  if (ctx.mode.startsWith('config') && /^do\s+/i.test(line)) {
+    const sub = line.replace(/^do\s+/i, '');
+    const savedMode = ctx.mode;
+    const tmpCtx = Object.assign({}, ctx, { mode: 'priv' });
+    const res = runCommand(state, tmpCtx, sub);
+    return res;
+  }
+
+  const t = tokenize(line);
+  const cmd0 = t[0] ? t[0].toLowerCase() : '';
+
+  // Universal navigation commands
+  if (matches(cmd0, 'exit', 2)) {
+    if (ctx.mode === 'user') return { output: [] };
+    if (ctx.mode === 'priv') { ctx.mode = 'user'; return { output: [] }; }
+    if (ctx.mode === 'config') { ctx.mode = 'priv'; return { output: [] }; }
+    if (['config-if', 'config-line', 'config-router', 'config-vlan', 'config-dhcp'].includes(ctx.mode)) {
+      ctx.mode = 'config'; ctx.curIf = null; ctx.curLine = null; ctx.curVlan = null; ctx.routerProto = null; ctx.curDhcpPool = null;
+      return { output: [] };
+    }
+    return { output: [] };
+  }
+  if (matches(cmd0, 'end', 3) && ctx.mode !== 'user') {
+    ctx.mode = 'priv'; ctx.curIf = null; ctx.curLine = null; ctx.curVlan = null; ctx.routerProto = null; ctx.curDhcpPool = null;
+    return { output: [] };
+  }
+
+  if (ctx.mode === 'user') {
+    if (matches(cmd0, 'enable', 2)) { ctx.mode = 'priv'; return { output: [] }; }
+    if (matches(cmd0, 'show', 2)) return dispatchShow(state, t);
+    return illegal();
+  }
+
+  if (ctx.mode === 'priv') {
+    if (matches(cmd0, 'disable', 4)) { ctx.mode = 'user'; return { output: [] }; }
+    if (matches(cmd0, 'configure', 4) && t[1] && matches(t[1], 'terminal', 1)) { ctx.mode = 'config'; return { output: ['Enter configuration commands, one per line.  End with CNTL/Z.'] }; }
+    if (matches(cmd0, 'show', 2)) return dispatchShow(state, t);
+    if (matches(cmd0, 'copy', 3) && t[1] && matches(t[1], 'running-config', 4)) { state.savedToStartup = true; return { output: ['Destination filename [startup-config]?', 'Building configuration...', '[OK]'] }; }
+    if (matches(cmd0, 'write', 2)) { state.savedToStartup = true; return { output: ['Building configuration...', '[OK]'] }; }
+    if (matches(cmd0, 'reload', 3)) return { output: ['Proceed with reload? (lab simulation — no actual reload occurs)'] };
+    return illegal();
+  }
+
+  if (ctx.mode === 'config') {
+    if (matches(cmd0, 'hostname', 3) && t[1]) { state.hostname = t[1]; return { output: [] }; }
+
+    if (matches(cmd0, 'interface', 3) && t[1]) {
+      const name = normalizeIfName(t.slice(1).join(''));
+      if (!name) return illegal();
+      getOrCreateIf(state, name);
+      ctx.mode = 'config-if'; ctx.curIf = name;
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'vlan', 3) && t[1] && /^\d+$/.test(t[1])) {
+      if (!state.vlans[t[1]]) state.vlans[t[1]] = { name: 'VLAN' + t[1].padStart(4, '0') };
+      ctx.mode = 'config-vlan'; ctx.curVlan = t[1];
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'route', 3)) {
+      if (t.length < 5) return illegal();
+      const network = t[2], mask = t[3], next = t[4];
+      const ad = t[5] && /^\d+$/.test(t[5]) ? t[5] : null;
+      state.routes.push({ network, mask, next, ad });
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'domain-name', 4) && t[2]) {
+      state.domainName = t[2]; return { output: [] };
+    }
+
+    if (matches(cmd0, 'router', 3) && t[1] && matches(t[1], 'ospf', 2) && t[2]) {
+      state.ospf = state.ospf && state.ospf.processId === t[2] ? state.ospf : { processId: t[2], routerId: null, networks: [], redistribute: [] };
+      ctx.mode = 'config-router'; ctx.routerProto = 'ospf';
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'router', 3) && t[1] && matches(t[1], 'eigrp', 3) && t[2]) {
+      state.eigrp = state.eigrp && state.eigrp.as === t[2] ? state.eigrp : { as: t[2], networks: [], noAutoSummary: false, redistribute: [] };
+      ctx.mode = 'config-router'; ctx.routerProto = 'eigrp';
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'ipv6', 3) && t[1] && matches(t[1], 'router', 3) && t[2] && matches(t[2], 'ospf', 2) && t[3]) {
+      state.ospfv3 = state.ospfv3 && state.ospfv3.processId === t[3] ? state.ospfv3 : { processId: t[3], routerId: null };
+      ctx.mode = 'config-router'; ctx.routerProto = 'ospfv3';
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'ipv6', 3) && t[1] && matches(t[1], 'unicast-routing', 6)) {
+      state.ipv6UnicastRouting = true; return { output: [] };
+    }
+
+    if (matches(cmd0, 'ipv6', 3) && t[1] && matches(t[1], 'route', 4) && t[2] && t[3]) {
+      state.ipv6Routes.push({ prefix: t[2], next: t[3] }); return { output: [] };
+    }
+
+    // access-list <num> permit|deny <protocol> <src> [wildcard] [dst] [wildcard] [eq <port>]
+    if (matches(cmd0, 'access-list', 6) && t[1] && /^\d+$/.test(t[1])) {
+      const num = t[1];
+      const action = (t[2] || '').toLowerCase();
+      if (action !== 'permit' && action !== 'deny') return illegal();
+      if (!state.acls[num]) state.acls[num] = [];
+      state.acls[num].push({ raw: t.slice(2).join(' '), action, rest: t.slice(3) });
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'dhcp', 3) && t[2] && matches(t[2], 'pool', 3) && t[3]) {
+      const name = t[3];
+      if (!state.dhcpPools[name]) state.dhcpPools[name] = { network: null, mask: null, defaultRouter: null, dnsServer: null };
+      ctx.mode = 'config-dhcp'; ctx.curDhcpPool = name;
+      return { output: [] };
+    }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'dhcp', 3) && t[2] && matches(t[2], 'excluded-address', 4) && t[3]) {
+      state.dhcpExcluded.push({ start: t[3], end: t[4] || t[3] });
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'nat', 3) && t[2] && matches(t[2], 'inside', 3) && t[3] && matches(t[3], 'source', 3)) {
+      if (t[4] && matches(t[4], 'static', 3) && t[5] && t[6]) {
+        state.natStatic.push({ local: t[5], global: t[6] });
+        return { output: [] };
+      }
+      if (t[4] && matches(t[4], 'list', 3) && t[5]) {
+        const aclNum = t[5];
+        let exitIf = null, overload = false;
+        for (let i = 6; i < t.length; i++) {
+          if (matches(t[i], 'interface', 4) && t[i + 1]) { exitIf = normalizeIfName(t[i + 1]); i++; }
+          if (matches(t[i], 'overload', 4)) overload = true;
+        }
+        state.natOverload = { aclNumber: aclNum, exitInterface: exitIf, overload };
+        return { output: [] };
+      }
+      return illegal();
+    }
+
+    if (matches(cmd0, 'spanning-tree', 8) && t[1] && matches(t[1], 'mode', 3) && t[2]) {
+      state.stpMode = t[2].toLowerCase(); return { output: [] };
+    }
+    if (matches(cmd0, 'spanning-tree', 8) && t[1] && matches(t[1], 'vlan', 3) && t[2] && t[3] && matches(t[3], 'root', 3) && t[4]) {
+      state.stpRootVlans[t[2]] = matches(t[4], 'primary', 3) ? 'primary' : 'secondary';
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'logging', 4) && t[1] && matches(t[1], 'host', 3) && t[2]) {
+      state.loggingHosts.push(t[2]); return { output: [] };
+    }
+    if (matches(cmd0, 'ntp', 3) && t[1] && matches(t[1], 'server', 3) && t[2]) {
+      state.ntpServers.push(t[2]); return { output: [] };
+    }
+    if (matches(cmd0, 'aaa', 3) && t[1] && matches(t[1], 'new-model', 4)) { state.aaaNewModel = true; return { output: [] }; }
+    if (matches(cmd0, 'aaa', 3) && t[1] && matches(t[1], 'authentication', 5) && t[2] && matches(t[2], 'login', 3) && t[3] && matches(t[3], 'default', 3) && t[4]) {
+      state.aaaAuthLoginDefault = t.slice(4).join(' '); return { output: [] };
+    }
+
+    if (cmd0 === 'no' && t[1] && matches(t[1], 'cdp', 3) && t[2] && matches(t[2], 'run', 3)) { state.cdpRun = false; return { output: [] }; }
+
+    if (matches(cmd0, 'enable', 3) && t[1] && matches(t[1], 'secret', 3) && t[2]) { state.enableSecret = t[2]; return { output: [] }; }
+    if (matches(cmd0, 'enable', 3) && t[1] && matches(t[1], 'password', 3) && t[2]) { state.enablePassword = t[2]; return { output: [] }; }
+
+    if (matches(cmd0, 'username', 4) && t[1]) {
+      const uname = t[1];
+      let priv = null, secret = null, password = null;
+      for (let i = 2; i < t.length; i++) {
+        if (matches(t[i], 'privilege', 4) && t[i + 1]) { priv = t[i + 1]; i++; }
+        else if (matches(t[i], 'secret', 3) && t[i + 1]) { secret = t[i + 1]; i++; }
+        else if (matches(t[i], 'password', 3) && t[i + 1]) { password = t[i + 1]; i++; }
+      }
+      const existing = state.users.find(u => u.username === uname);
+      const rec = existing || { username: uname };
+      if (priv) rec.privilege = priv;
+      if (secret) rec.secret = secret;
+      if (password) rec.password = password;
+      if (!existing) state.users.push(rec);
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'line', 3) && t[1]) {
+      if (matches(t[1], 'console', 3)) { ctx.mode = 'config-line'; ctx.curLine = 'console'; return { output: [] }; }
+      if (matches(t[1], 'vty', 3)) { ctx.mode = 'config-line'; ctx.curLine = 'vty'; return { output: [] }; }
+      return illegal();
+    }
+
+    if (matches(cmd0, 'banner', 3) && t[1] && matches(t[1], 'motd', 3)) {
+      const rest = line.replace(/^banner\s+motd\s+/i, '');
+      const delim = rest[0];
+      const body = rest.slice(1, rest.lastIndexOf(delim));
+      state.bannerMotd = body.trim();
+      return { output: ['Enter TEXT message.  End with the character \'' + delim + '\'.'] };
+    }
+
+    if (matches(cmd0, 'service', 3) && t[1] && matches(t[1], 'password-encryption', 8)) {
+      state.servicePasswordEncryption = true; return { output: [] };
+    }
+
+    if (matches(cmd0, 'crypto', 3) && t[1] && matches(t[1], 'key', 3) && t[2] && matches(t[2], 'generate', 3) && t[3] && matches(t[3], 'rsa', 3)) {
+      if (!state.domainName) return { output: ['% Please define a domain-name first.'] };
+      state.cryptoKeyGenerated = true;
+      return { output: ['The name for the keys will be: ' + state.hostname + '.' + state.domainName, 'The key modulus size is 1024 bits', '% Key pair was generated'] };
+    }
+
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ssh', 3) && t[2] && matches(t[2], 'version', 3)) {
+      state.sshVersion = t[3]; return { output: [] };
+    }
+
+    return illegal();
+  }
+
+  if (ctx.mode === 'config-if') {
+    const iface = state.interfaces[ctx.curIf];
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'address', 3) && t[2] && t[3]) {
+      if (!isValidIp(t[2]) || !isValidIp(t[3])) return { output: ['% Invalid IP address or mask'] };
+      iface.ip = t[2]; iface.mask = t[3]; return { output: [] };
+    }
+    if (cmd0 === 'no' && t[1] && matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'address', 3)) { iface.ip = null; iface.mask = null; return { output: [] }; }
+    if (matches(cmd0, 'shutdown', 4)) { iface.shutdown = true; return { output: [] }; }
+    if (cmd0 === 'no' && t[1] && matches(t[1], 'shutdown', 4)) { iface.shutdown = false; return { output: [] }; }
+    if (matches(cmd0, 'description', 4)) { iface.description = t.slice(1).join(' '); return { output: [] }; }
+
+    if (matches(cmd0, 'encapsulation', 5) && t[1] && /dot1q/i.test(t[1]) && t[2]) {
+      iface.encapsulation = { vlan: t[2], native: !!(t[3] && matches(t[3], 'native', 3)) };
+      return { output: [] };
+    }
+
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'mode', 3) && t[2]) {
+      if (matches(t[2], 'access', 3)) { iface.switchport.mode = 'access'; return { output: [] }; }
+      if (matches(t[2], 'trunk', 3)) { iface.switchport.mode = 'trunk'; return { output: [] }; }
+      return illegal();
+    }
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'access', 3) && t[2] && matches(t[2], 'vlan', 3) && t[3]) {
+      iface.switchport.accessVlan = t[3];
+      if (!state.vlans[t[3]]) state.vlans[t[3]] = { name: 'VLAN' + t[3].padStart(4, '0') };
+      return { output: [] };
+    }
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'trunk', 3) && t[2] && matches(t[2], 'native', 3) && t[3] && matches(t[3], 'vlan', 3) && t[4]) {
+      iface.switchport.nativeVlan = t[4]; return { output: [] };
+    }
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'trunk', 3) && t[2] && matches(t[2], 'allowed', 3) && t[3] && matches(t[3], 'vlan', 3)) {
+      let idx = 4;
+      let mode = 'set';
+      if (t[4] && matches(t[4], 'add', 3)) { mode = 'add'; idx = 5; }
+      else if (t[4] && matches(t[4], 'remove', 3)) { mode = 'remove'; idx = 5; }
+      const list = (t[idx] || '').split(',').filter(Boolean);
+      if (mode === 'set' || !Array.isArray(iface.switchport.trunkAllowed)) iface.switchport.trunkAllowed = [];
+      if (mode === 'remove') {
+        iface.switchport.trunkAllowed = iface.switchport.trunkAllowed.filter(v => !list.includes(v));
+      } else {
+        list.forEach(v => { if (!iface.switchport.trunkAllowed.includes(v)) iface.switchport.trunkAllowed.push(v); });
+      }
+      return { output: [] };
+    }
+
+    // Port security
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'port-security', 6) && !t[2]) {
+      iface.portSecurity.enabled = true; return { output: [] };
+    }
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'port-security', 6) && t[2] && matches(t[2], 'maximum', 3) && t[3]) {
+      iface.portSecurity.enabled = true; iface.portSecurity.maximum = parseInt(t[3], 10); return { output: [] };
+    }
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'port-security', 6) && t[2] && matches(t[2], 'violation', 4) && t[3]) {
+      iface.portSecurity.enabled = true; iface.portSecurity.violation = t[3].toLowerCase(); return { output: [] };
+    }
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'port-security', 6) && t[2] && matches(t[2], 'mac-address', 4) && t[3] && matches(t[3], 'sticky', 3)) {
+      iface.portSecurity.enabled = true; iface.portSecurity.stickyMac = true; return { output: [] };
+    }
+
+    // HSRP
+    if (matches(cmd0, 'standby', 5) && t[1] && t[2] && matches(t[2], 'ip', 2) && t[3]) {
+      if (!iface.hsrp) iface.hsrp = { group: t[1], ip: null, priority: 100, preempt: false, track: false };
+      iface.hsrp.ip = t[3]; return { output: [] };
+    }
+    if (matches(cmd0, 'standby', 5) && t[1] && t[2] && matches(t[2], 'priority', 4) && t[3]) {
+      if (!iface.hsrp) iface.hsrp = { group: t[1], ip: null, priority: 100, preempt: false, track: false };
+      iface.hsrp.priority = parseInt(t[3], 10); return { output: [] };
+    }
+    if (matches(cmd0, 'standby', 5) && t[1] && t[2] && matches(t[2], 'preempt', 5)) {
+      if (!iface.hsrp) iface.hsrp = { group: t[1], ip: null, priority: 100, preempt: false, track: false };
+      iface.hsrp.preempt = true; return { output: [] };
+    }
+    if (matches(cmd0, 'standby', 5) && t[1] && t[2] && matches(t[2], 'track', 4)) {
+      if (!iface.hsrp) iface.hsrp = { group: t[1], ip: null, priority: 100, preempt: false, track: false };
+      iface.hsrp.track = true; return { output: [] };
+    }
+
+    // STP per-interface
+    if (matches(cmd0, 'spanning-tree', 8) && t[1] && matches(t[1], 'portfast', 4)) { iface.portfast = true; return { output: [] }; }
+    if (matches(cmd0, 'spanning-tree', 8) && t[1] && matches(t[1], 'bpduguard', 5) && t[2] && matches(t[2], 'enable', 3)) { iface.bpduguard = true; return { output: [] }; }
+
+    // CDP per-interface
+    if (cmd0 === 'no' && t[1] && matches(t[1], 'cdp', 3) && t[2] && matches(t[2], 'enable', 3)) { iface.cdpEnabled = false; return { output: [] }; }
+
+    // NAT side
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'nat', 3) && t[2] && matches(t[2], 'inside', 3) && !t[3]) { iface.natSide = 'inside'; return { output: [] }; }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'nat', 3) && t[2] && matches(t[2], 'outside', 3) && !t[3]) { iface.natSide = 'outside'; return { output: [] }; }
+
+    // DHCP relay
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'helper-address', 4) && t[2]) { iface.helperAddress = t[2]; return { output: [] }; }
+
+    // ACL application
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'access-group', 7) && t[2] && t[3]) {
+      if (matches(t[3], 'in', 2)) iface.aclIn = t[2];
+      else if (matches(t[3], 'out', 2)) iface.aclOut = t[2];
+      return { output: [] };
+    }
+
+    // IPv6 addressing + OSPFv3
+    if (matches(cmd0, 'ipv6', 3) && t[1] && matches(t[1], 'address', 4) && t[2]) {
+      const parts = t[2].split('/');
+      iface.ipv6 = { address: parts[0], prefix: parts[1] || null };
+      return { output: [] };
+    }
+    if (matches(cmd0, 'ipv6', 3) && t[1] && matches(t[1], 'ospf', 2) && t[2] && t[3] && matches(t[3], 'area', 3) && t[4]) {
+      iface.ipv6OspfProcess = t[2]; iface.ipv6OspfArea = t[4]; return { output: [] };
+    }
+
+    // EtherChannel
+    if (matches(cmd0, 'channel-group', 8) && t[1] && t[2] && matches(t[2], 'mode', 3) && t[3]) {
+      iface.channelGroup = t[1]; iface.channelMode = t[3].toLowerCase(); return { output: [] };
+    }
+
+    // GRE tunnel
+    if (matches(cmd0, 'tunnel', 6) && t[1] && matches(t[1], 'source', 3) && t[2]) { iface.tunnelSource = t[2]; return { output: [] }; }
+    if (matches(cmd0, 'tunnel', 6) && t[1] && matches(t[1], 'destination', 4) && t[2]) { iface.tunnelDestination = t[2]; return { output: [] }; }
+
+    return illegal();
+  }
+
+  if (ctx.mode === 'config-line') {
+    const target = ctx.curLine === 'console' ? state.lines.console : state.lines.vty;
+    if (matches(cmd0, 'password', 3) && t[1]) { target.password = t[1]; return { output: [] }; }
+    if (matches(cmd0, 'login', 3) && !t[1]) { target.login = 'password'; return { output: [] }; }
+    if (matches(cmd0, 'login', 3) && t[1] && matches(t[1], 'local', 3)) { target.login = 'local'; return { output: [] }; }
+    if (ctx.curLine === 'vty' && matches(cmd0, 'transport', 5) && t[1] && matches(t[1], 'input', 3) && t[2]) {
+      target.transportInput = t.slice(2).map(x => x.toLowerCase());
+      return { output: [] };
+    }
+    if (ctx.curLine === 'vty' && matches(cmd0, 'access-class', 7) && t[1] && t[2] && matches(t[2], 'in', 2)) {
+      target.accessClass = t[1]; return { output: [] };
+    }
+    return illegal();
+  }
+
+  if (ctx.mode === 'config-router') {
+    if (matches(cmd0, 'router-id', 6) && t[1]) {
+      if (ctx.routerProto === 'ospf') state.ospf.routerId = t[1];
+      else if (ctx.routerProto === 'ospfv3') state.ospfv3.routerId = t[1];
+      return { output: [] };
+    }
+    if (ctx.routerProto === 'ospf' && matches(cmd0, 'network', 3) && t[1] && t[2] && t[3] && matches(t[3], 'area', 3) && t[4]) {
+      state.ospf.networks.push({ network: t[1], wildcard: t[2], area: t[4] });
+      return { output: [] };
+    }
+    if (ctx.routerProto === 'ospf' && matches(cmd0, 'redistribute', 6) && t[1]) {
+      state.ospf.redistribute.push(t[1].toLowerCase()); return { output: [] };
+    }
+    if (ctx.routerProto === 'eigrp' && matches(cmd0, 'network', 3) && t[1]) {
+      state.eigrp.networks.push({ network: t[1], wildcard: t[2] || null });
+      return { output: [] };
+    }
+    if (ctx.routerProto === 'eigrp' && cmd0 === 'no' && t[1] && matches(t[1], 'auto-summary', 5)) {
+      state.eigrp.noAutoSummary = true; return { output: [] };
+    }
+    if (ctx.routerProto === 'eigrp' && matches(cmd0, 'redistribute', 6) && t[1]) {
+      state.eigrp.redistribute.push(t[1].toLowerCase()); return { output: [] };
+    }
+    return illegal();
+  }
+
+  if (ctx.mode === 'config-vlan') {
+    if (matches(cmd0, 'name', 3) && t[1]) { state.vlans[ctx.curVlan].name = t[1]; return { output: [] }; }
+    return illegal();
+  }
+
+  if (ctx.mode === 'config-dhcp') {
+    const pool = state.dhcpPools[ctx.curDhcpPool];
+    if (matches(cmd0, 'network', 3) && t[1] && t[2]) { pool.network = t[1]; pool.mask = t[2]; return { output: [] }; }
+    if (matches(cmd0, 'default-router', 8) && t[1]) { pool.defaultRouter = t[1]; return { output: [] }; }
+    if (matches(cmd0, 'dns-server', 4) && t[1]) { pool.dnsServer = t[1]; return { output: [] }; }
+    return illegal();
+  }
+
+  return illegal();
+
+  function illegal() { return { output: ['% Invalid input detected at \'^\' marker.'], illegal: true }; }
+}
+
+function dispatchShow(state, t) {
+  if (!t[1]) return { output: ['% Incomplete command.'] };
+  if (matches(t[1], 'running-config', 3)) return { output: synthRunningConfig(state) };
+  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'interface', 3) && t[3] && matches(t[3], 'brief', 3)) return { output: showIpIntBrief(state) };
+  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'route', 3)) return { output: showIpRoute(state) };
+  if (matches(t[1], 'vlan', 3) && t[2] && matches(t[2], 'brief', 3)) return { output: showVlanBrief(state) };
+  if (matches(t[1], 'interfaces', 4) && t[2] && matches(t[2], 'trunk', 3)) return { output: showInterfacesTrunk(state) };
+  return { output: ['% Incomplete command or not supported in this lab simulator.'] };
+}
+
+// ---- Grading helper accessors, exposed for lab objective checks ----
+const G = {
+  iface: (state, name) => state.interfaces[normalizeIfName(name) || name],
+  hasIp: (state, name, ip, mask) => { const i = G.iface(state, name); return !!i && i.ip === ip && i.mask === mask; },
+  isUp: (state, name) => { const i = G.iface(state, name); return !!i && i.shutdown === false; },
+  hostnameIs: (state, name) => state.hostname === name,
+  vlanExists: (state, id, name) => { const v = state.vlans[String(id)]; return !!v && (!name || v.name === name); },
+  accessVlanIs: (state, ifName, vlanId) => { const i = G.iface(state, ifName); return !!i && i.switchport.mode === 'access' && String(i.switchport.accessVlan) === String(vlanId); },
+  isTrunk: (state, ifName) => { const i = G.iface(state, ifName); return !!i && i.switchport.mode === 'trunk'; },
+  trunkAllows: (state, ifName, vlanId) => { const i = G.iface(state, ifName); return !!i && i.switchport.mode === 'trunk' && Array.isArray(i.switchport.trunkAllowed) && i.switchport.trunkAllowed.includes(String(vlanId)); },
+  nativeVlanIs: (state, ifName, vlanId) => { const i = G.iface(state, ifName); return !!i && String(i.switchport.nativeVlan) === String(vlanId); },
+  descriptionSet: (state, ifName) => { const i = G.iface(state, ifName); return !!i && !!i.description; },
+  hasRoute: (state, network, mask, next) => state.routes.some(r => r.network === network && r.mask === mask && r.next === next),
+  hasDefaultRoute: (state, next) => state.routes.some(r => r.network === '0.0.0.0' && (!next || r.next === next)),
+  encapsulationIs: (state, ifName, vlanId) => { const i = G.iface(state, ifName); return !!i && i.encapsulation && String(i.encapsulation.vlan) === String(vlanId); },
+  ospfEnabled: (state, procId) => !!state.ospf && (!procId || state.ospf.processId === String(procId)),
+  ospfRouterIdIs: (state, id) => !!state.ospf && state.ospf.routerId === id,
+  ospfAdvertises: (state, network, wildcard, area) => !!state.ospf && state.ospf.networks.some(n => n.network === network && n.wildcard === wildcard && n.area === String(area)),
+  enableSecretSet: (state) => !!state.enableSecret,
+  userExists: (state, username, opts) => state.users.some(u => u.username === username && (!opts || ((!opts.privilege || String(u.privilege) === String(opts.privilege)) && (!opts.hasSecret || !!u.secret)))),
+  vtyLoginLocal: (state) => state.lines.vty.login === 'local',
+  vtyTransportIs: (state, list) => { const t = state.lines.vty.transportInput.slice().sort(); const e = list.slice().sort(); return t.length === e.length && t.every((v, i) => v === e[i]); },
+  cryptoKeyGenerated: (state) => !!state.cryptoKeyGenerated,
+  domainNameIs: (state, name) => state.domainName === name,
+  consolePasswordSet: (state) => !!state.lines.console.password,
+  bannerContains: (state, substr) => !!state.bannerMotd && state.bannerMotd.toLowerCase().includes(substr.toLowerCase()),
+
+  // --- Extended accessors (v2) ---
+  portSecurityEnabled: (state, ifName) => { const i = G.iface(state, ifName); return !!i && i.portSecurity.enabled; },
+  portSecurityMax: (state, ifName, n) => { const i = G.iface(state, ifName); return !!i && i.portSecurity.enabled && i.portSecurity.maximum === n; },
+  portSecurityViolation: (state, ifName, mode) => { const i = G.iface(state, ifName); return !!i && i.portSecurity.violation === mode; },
+  portSecurityStickyMac: (state, ifName) => { const i = G.iface(state, ifName); return !!i && i.portSecurity.stickyMac; },
+  hsrpIp: (state, ifName, group, ip) => { const i = G.iface(state, ifName); return !!i && !!i.hsrp && String(i.hsrp.group) === String(group) && i.hsrp.ip === ip; },
+  hsrpPriority: (state, ifName, group, pri) => { const i = G.iface(state, ifName); return !!i && !!i.hsrp && String(i.hsrp.group) === String(group) && i.hsrp.priority === pri; },
+  hsrpPreempt: (state, ifName) => { const i = G.iface(state, ifName); return !!i && !!i.hsrp && i.hsrp.preempt; },
+  hsrpTrack: (state, ifName) => { const i = G.iface(state, ifName); return !!i && !!i.hsrp && i.hsrp.track; },
+  portfastEnabled: (state, ifName) => { const i = G.iface(state, ifName); return !!i && i.portfast; },
+  bpduguardEnabled: (state, ifName) => { const i = G.iface(state, ifName); return !!i && i.bpduguard; },
+  stpModeIs: (state, mode) => state.stpMode === mode.toLowerCase(),
+  stpRootRoleIs: (state, vlanId, role) => state.stpRootVlans[String(vlanId)] === role,
+  cdpGloballyDisabled: (state) => state.cdpRun === false,
+  cdpDisabledOn: (state, ifName) => { const i = G.iface(state, ifName); return !!i && i.cdpEnabled === false; },
+  natSideIs: (state, ifName, side) => { const i = G.iface(state, ifName); return !!i && i.natSide === side; },
+  hasNatStatic: (state, local, glob) => state.natStatic.some(n => n.local === local && n.global === glob),
+  hasNatOverload: (state, aclNumber) => !!state.natOverload && (!aclNumber || String(state.natOverload.aclNumber) === String(aclNumber)) && state.natOverload.overload,
+  aclHasRule: (state, num, action, substrIncludes) => { const a = state.acls[String(num)]; return !!a && a.some(r => r.action === action && (!substrIncludes || r.raw.toLowerCase().includes(substrIncludes.toLowerCase()))); },
+  aclExists: (state, num) => !!state.acls[String(num)] && state.acls[String(num)].length > 0,
+  aclAppliedIn: (state, ifName, num) => { const i = G.iface(state, ifName); return !!i && String(i.aclIn) === String(num); },
+  aclAppliedOut: (state, ifName, num) => { const i = G.iface(state, ifName); return !!i && String(i.aclOut) === String(num); },
+  vtyAccessClassIs: (state, num) => String(state.lines.vty.accessClass) === String(num),
+  dhcpPoolNetwork: (state, name, network, mask) => { const p = state.dhcpPools[name]; return !!p && p.network === network && p.mask === mask; },
+  dhcpPoolDefaultRouter: (state, name, ip) => { const p = state.dhcpPools[name]; return !!p && p.defaultRouter === ip; },
+  dhcpPoolDnsServer: (state, name, ip) => { const p = state.dhcpPools[name]; return !!p && p.dnsServer === ip; },
+  hasDhcpExclusion: (state, start, end) => state.dhcpExcluded.some(e => e.start === start && (e.end === end || (!end && e.end === start))),
+  helperAddressIs: (state, ifName, ip) => { const i = G.iface(state, ifName); return !!i && i.helperAddress === ip; },
+  channelGroupIs: (state, ifName, group, mode) => { const i = G.iface(state, ifName); return !!i && String(i.channelGroup) === String(group) && (!mode || i.channelMode === mode); },
+  tunnelConfigured: (state, ifName, src, dst) => { const i = G.iface(state, ifName); return !!i && i.tunnelSource === src && i.tunnelDestination === dst; },
+  ipv6UnicastRoutingOn: (state) => state.ipv6UnicastRouting === true,
+  ipv6AddressIs: (state, ifName, addr) => { const i = G.iface(state, ifName); return !!i && !!i.ipv6 && i.ipv6.address === addr; },
+  ipv6HasRoute: (state, prefix, next) => state.ipv6Routes.some(r => r.prefix === prefix && r.next === next),
+  ipv6OspfEnabledOn: (state, ifName, proc, area) => { const i = G.iface(state, ifName); return !!i && String(i.ipv6OspfProcess) === String(proc) && String(i.ipv6OspfArea) === String(area); },
+  ospfv3RouterIdIs: (state, id) => !!state.ospfv3 && state.ospfv3.routerId === id,
+  eigrpEnabled: (state, asNum) => !!state.eigrp && (!asNum || state.eigrp.as === String(asNum)),
+  eigrpAdvertisesNetwork: (state, network) => !!state.eigrp && state.eigrp.networks.some(n => n.network === network),
+  eigrpNoAutoSummary: (state) => !!state.eigrp && state.eigrp.noAutoSummary === true,
+  ospfRedistributes: (state, proto) => !!state.ospf && state.ospf.redistribute.includes(proto.toLowerCase()),
+  eigrpRedistributes: (state, proto) => !!state.eigrp && state.eigrp.redistribute.includes(proto.toLowerCase()),
+  routeHasAd: (state, network, mask, next, ad) => state.routes.some(r => r.network === network && r.mask === mask && r.next === next && String(r.ad) === String(ad)),
+  loggingHostSet: (state, ip) => state.loggingHosts.includes(ip),
+  ntpServerSet: (state, ip) => state.ntpServers.includes(ip),
+  aaaNewModelOn: (state) => state.aaaNewModel === true,
+  aaaAuthLoginUsesLocal: (state) => !!state.aaaAuthLoginDefault && state.aaaAuthLoginDefault.toLowerCase().includes('local')
+};
+
+// Export for Node testing; browser will just use the globals directly.
+if (typeof module !== 'undefined') {
+  module.exports = { freshState, freshInterface, newCtx, runCommand, normalizeIfName, G, promptFor };
+}
+
+    </script>
+    <script>
+// ============================================================
+// CLI Lab definitions. Each lab: id, title, difficulty, domain,
+// estMinutes, scenario text, initial device (hostname + starter
+// interfaces), and objectives — each graded against device state
+// via the G.* accessors from engine.js, not exact command text.
+// ============================================================
+
+// Router interfaces default 'router' kind (shutdown:true); switch ports need kind:'switch' (shutdown:false).
+function routerState(hostname, ifNames) {
+  const s = freshState(hostname);
+  ifNames.forEach(n => { s.interfaces[normalizeIfName(n)] = freshInterface('router'); });
+  return s;
+}
+function switchState(hostname, ifNames) {
+  const s = freshState(hostname);
+  ifNames.forEach(n => { s.interfaces[normalizeIfName(n)] = freshInterface('switch'); });
+  return s;
+}
+
+const LABS = [
+{
+  id: 1, title: 'Basic Router Configuration', difficulty: 'Easy', domain: 'Network Fundamentals', est: 10,
+  scenario: 'You are configuring a brand-new branch router, R1, fresh out of the box. Set the hostname, bring up the LAN-facing interface with the correct addressing, and label it clearly so the next engineer knows what it connects to.',
+  requirements: [
+    'Set the hostname to R1',
+    'Configure GigabitEthernet0/0 with IP address 192.168.1.1 255.255.255.0',
+    'Add the description "LAN Uplink" to GigabitEthernet0/0',
+    'Bring the interface up (no shutdown)'
+  ],
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Hostname is set to R1', check: s => G.hostnameIs(s, 'R1'), hint: 'From global config mode: hostname R1' },
+    { desc: 'Gi0/0 has IP 192.168.1.1 255.255.255.0', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0'), hint: 'interface gi0/0, then: ip address 192.168.1.1 255.255.255.0' },
+    { desc: 'Gi0/0 has a description containing "LAN Uplink"', check: s => G.descriptionSet(s, 'GigabitEthernet0/0'), hint: 'Inside the interface: description LAN Uplink' },
+    { desc: 'Gi0/0 is administratively up', check: s => G.isUp(s, 'GigabitEthernet0/0'), hint: 'Interfaces are shutdown by default on a new router — type: no shutdown' }
+  ]
+},
+{
+  id: 2, title: 'Static Routing', difficulty: 'Easy', domain: 'IP Connectivity', est: 12,
+  scenario: 'R1 has two directly connected networks and needs to reach a remote office subnet (10.10.10.0/24) reachable via 192.168.1.254. It should also send anything else unknown out to the ISP at 203.0.113.1.',
+  requirements: [
+    'Configure Gi0/0 with IP 192.168.1.1 255.255.255.0 and bring it up',
+    'Add a static route to 10.10.10.0 255.255.255.0 via next-hop 192.168.1.254',
+    'Add a default route (0.0.0.0 0.0.0.0) via next-hop 203.0.113.1'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'Serial0/0/0']),
+  objectives: [
+    { desc: 'Gi0/0 configured and up (192.168.1.1/24)', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / ip address 192.168.1.1 255.255.255.0 / no shutdown' },
+    { desc: 'Static route to 10.10.10.0/24 via 192.168.1.254 exists', check: s => G.hasRoute(s, '10.10.10.0', '255.255.255.0', '192.168.1.254'), hint: 'From global config: ip route 10.10.10.0 255.255.255.0 192.168.1.254' },
+    { desc: 'Default route via 203.0.113.1 exists', check: s => G.hasDefaultRoute(s, '203.0.113.1'), hint: 'ip route 0.0.0.0 0.0.0.0 203.0.113.1' }
+  ]
+},
+{
+  id: 3, title: 'VLAN Configuration', difficulty: 'Easy', domain: 'Network Access', est: 12,
+  scenario: 'Switch SW1 needs two new VLANs for the Sales and Engineering teams. Create the VLANs, name them, and assign the correct access ports.',
+  requirements: [
+    'Create VLAN 10 named SALES',
+    'Create VLAN 20 named ENGINEERING',
+    'Set FastEthernet0/1 as an access port in VLAN 10',
+    'Set FastEthernet0/2 as an access port in VLAN 20'
+  ],
+  initial: () => switchState('SW1', ['FastEthernet0/1', 'FastEthernet0/2', 'FastEthernet0/3', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'VLAN 10 exists, named SALES', check: s => G.vlanExists(s, 10, 'SALES'), hint: 'vlan 10 then: name SALES' },
+    { desc: 'VLAN 20 exists, named ENGINEERING', check: s => G.vlanExists(s, 20, 'ENGINEERING'), hint: 'vlan 20 then: name ENGINEERING' },
+    { desc: 'Fa0/1 is an access port in VLAN 10', check: s => G.accessVlanIs(s, 'FastEthernet0/1', 10), hint: 'interface fa0/1 / switchport mode access / switchport access vlan 10' },
+    { desc: 'Fa0/2 is an access port in VLAN 20', check: s => G.accessVlanIs(s, 'FastEthernet0/2', 20), hint: 'interface fa0/2 / switchport mode access / switchport access vlan 20' }
+  ]
+},
+{
+  id: 4, title: 'Trunk Links & Native VLAN', difficulty: 'Medium', domain: 'Network Access', est: 15,
+  scenario: 'SW1 connects to SW2 via GigabitEthernet0/1. This link needs to carry VLANs 10, 20, and 99, with VLAN 99 as a dedicated (non-default) native VLAN — a security best practice you learned to avoid leaving native VLAN at the default.',
+  requirements: [
+    'Configure Gi0/1 as a trunk port',
+    'Set the native VLAN on Gi0/1 to 99',
+    'Restrict the trunk to allow only VLANs 10, 20, and 99',
+    'Add a description "Trunk to SW2"'
+  ],
+  initial: () => switchState('SW1', ['GigabitEthernet0/1', 'FastEthernet0/1']),
+  objectives: [
+    { desc: 'Gi0/1 is in trunk mode', check: s => G.isTrunk(s, 'GigabitEthernet0/1'), hint: 'interface gi0/1 / switchport mode trunk' },
+    { desc: 'Native VLAN on Gi0/1 is 99', check: s => G.nativeVlanIs(s, 'GigabitEthernet0/1', 99), hint: 'switchport trunk native vlan 99' },
+    { desc: 'Trunk allows VLAN 10', check: s => G.trunkAllows(s, 'GigabitEthernet0/1', 10), hint: 'switchport trunk allowed vlan 10,20,99' },
+    { desc: 'Trunk allows VLAN 20', check: s => G.trunkAllows(s, 'GigabitEthernet0/1', 20), hint: 'Make sure all three VLAN IDs are in one allowed-vlan list' },
+    { desc: 'Trunk allows VLAN 99', check: s => G.trunkAllows(s, 'GigabitEthernet0/1', 99), hint: 'The native VLAN should also be in the allowed list' },
+    { desc: 'Gi0/1 has a description', check: s => G.descriptionSet(s, 'GigabitEthernet0/1'), hint: 'description Trunk to SW2' }
+  ]
+},
+{
+  id: 5, title: 'Router-on-a-Stick', difficulty: 'Medium', domain: 'Network Access', est: 18,
+  scenario: 'R1 has a single trunk link (Gi0/0) to the switch carrying VLANs 10 and 20. Configure subinterfaces so R1 can route between them.',
+  requirements: [
+    'Bring up the physical interface Gi0/0 (no IP needed on the physical interface itself)',
+    'Create subinterface Gi0/0.10 with 802.1Q encapsulation for VLAN 10, IP 192.168.10.1 255.255.255.0',
+    'Create subinterface Gi0/0.20 with 802.1Q encapsulation for VLAN 20, IP 192.168.20.1 255.255.255.0'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Physical Gi0/0 is up', check: s => G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / no shutdown (the physical link must be up for its subinterfaces to work)' },
+    { desc: 'Gi0/0.10 encapsulated for VLAN 10', check: s => G.encapsulationIs(s, 'GigabitEthernet0/0.10', 10), hint: 'interface gi0/0.10 then: encapsulation dot1Q 10' },
+    { desc: 'Gi0/0.10 has IP 192.168.10.1/24', check: s => G.hasIp(s, 'GigabitEthernet0/0.10', '192.168.10.1', '255.255.255.0'), hint: 'ip address 192.168.10.1 255.255.255.0' },
+    { desc: 'Gi0/0.20 encapsulated for VLAN 20', check: s => G.encapsulationIs(s, 'GigabitEthernet0/0.20', 20), hint: 'interface gi0/0.20 then: encapsulation dot1Q 20' },
+    { desc: 'Gi0/0.20 has IP 192.168.20.1/24', check: s => G.hasIp(s, 'GigabitEthernet0/0.20', '192.168.20.1', '255.255.255.0'), hint: 'ip address 192.168.20.1 255.255.255.0' }
+  ]
+},
+{
+  id: 6, title: 'Single-Area OSPF', difficulty: 'Medium', domain: 'IP Connectivity', est: 18,
+  scenario: 'R1 has two directly connected networks that need to be advertised via OSPF process 1 into Area 0, with a predictable router ID.',
+  requirements: [
+    'Configure Gi0/0 (192.168.1.1/24) and Gi0/1 (10.0.0.1/30), both up',
+    'Enable OSPF process 1',
+    'Set the OSPF router-id to 1.1.1.1',
+    'Advertise both networks into Area 0'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Gi0/0 configured & up (192.168.1.1/24)', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / ip address 192.168.1.1 255.255.255.0 / no shutdown' },
+    { desc: 'Gi0/1 configured & up (10.0.0.1/30)', check: s => G.hasIp(s, 'GigabitEthernet0/1', '10.0.0.1', '255.255.255.252') && G.isUp(s, 'GigabitEthernet0/1'), hint: 'interface gi0/1 / ip address 10.0.0.1 255.255.255.252 / no shutdown' },
+    { desc: 'OSPF process 1 is running', check: s => G.ospfEnabled(s, 1), hint: 'router ospf 1' },
+    { desc: 'Router ID is 1.1.1.1', check: s => G.ospfRouterIdIs(s, '1.1.1.1'), hint: 'Inside router ospf 1: router-id 1.1.1.1' },
+    { desc: '192.168.1.0/24 advertised into Area 0', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'network 192.168.1.0 0.0.0.255 area 0' },
+    { desc: '10.0.0.0/30 advertised into Area 0', check: s => G.ospfAdvertises(s, '10.0.0.0', '0.0.0.3', 0), hint: 'network 10.0.0.0 0.0.0.3 area 0' }
+  ]
+}
+];
+LABS.push(
+{
+  id: 7, title: 'Device Security Hardening', difficulty: 'Medium', domain: 'Security Fundamentals', est: 15,
+  scenario: 'R1 is about to go into production and is currently wide open — default passwords, Telnet access, no local accounts. Lock it down: a strong enable secret, a local admin account, and SSH-only remote management.',
+  requirements: [
+    'Set the enable secret to Cisco123!',
+    'Create a local user "admin" with privilege 15 and secret AdminPass1',
+    'Set the domain name to lab.local and generate an RSA key pair (required before SSH will work)',
+    'On the VTY lines, require local login and permit SSH only (no Telnet)'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Enable secret is configured', check: s => G.enableSecretSet(s), hint: 'enable secret Cisco123!' },
+    { desc: 'Local user "admin" exists with privilege 15 and a secret', check: s => G.userExists(s, 'admin', { privilege: 15, hasSecret: true }), hint: 'username admin privilege 15 secret AdminPass1' },
+    { desc: 'Domain name is set to lab.local', check: s => G.domainNameIs(s, 'lab.local'), hint: 'ip domain-name lab.local (needed before RSA keys can be generated)' },
+    { desc: 'RSA key pair has been generated', check: s => G.cryptoKeyGenerated(s), hint: 'crypto key generate rsa — this only works after a domain name is set' },
+    { desc: 'VTY lines require local login', check: s => G.vtyLoginLocal(s), hint: 'line vty 0 4, then: login local' },
+    { desc: 'VTY lines only permit SSH (no Telnet)', check: s => G.vtyTransportIs(s, ['ssh']), hint: 'Inside line vty 0 4: transport input ssh' }
+  ]
+},
+{
+  id: 8, title: 'Loopback & Serial WAN Link', difficulty: 'Easy', domain: 'IP Connectivity', est: 10,
+  scenario: 'R1 needs a stable loopback interface (commonly used as a router ID or management address, since it never physically goes down) and a WAN serial link to a remote site.',
+  requirements: [
+    'Create Loopback0 with IP 1.1.1.1 255.255.255.255 and bring it up',
+    'Configure Serial0/0/0 with IP 172.16.0.1 255.255.255.252 and bring it up',
+    'Add the description "WAN to Branch2" on Serial0/0/0'
+  ],
+  initial: () => routerState('R1', ['Serial0/0/0']),
+  objectives: [
+    { desc: 'Loopback0 has IP 1.1.1.1 255.255.255.255', check: s => G.hasIp(s, 'Loopback0', '1.1.1.1', '255.255.255.255'), hint: 'interface loopback0 / ip address 1.1.1.1 255.255.255.255' },
+    { desc: 'Loopback0 is up', check: s => G.isUp(s, 'Loopback0'), hint: 'Loopbacks default to up once an IP is set, but confirm with no shutdown' },
+    { desc: 'Serial0/0/0 has IP 172.16.0.1 255.255.255.252', check: s => G.hasIp(s, 'Serial0/0/0', '172.16.0.1', '255.255.255.252'), hint: 'interface se0/0/0 / ip address 172.16.0.1 255.255.255.252' },
+    { desc: 'Serial0/0/0 is up', check: s => G.isUp(s, 'Serial0/0/0'), hint: 'no shutdown' },
+    { desc: 'Serial0/0/0 has a description', check: s => G.descriptionSet(s, 'Serial0/0/0'), hint: 'description WAN to Branch2' }
+  ]
+},
+{
+  id: 9, title: 'Banner & Console Security', difficulty: 'Easy', domain: 'Security Fundamentals', est: 8,
+  scenario: 'Auditors flagged R1 for having no legal warning banner and an unprotected console port. Fix both before the device goes live.',
+  requirements: [
+    'Configure a MOTD banner that includes the word "Unauthorized"',
+    'Set a console password of ConsolePass1',
+    'Require a password at console login'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'MOTD banner is set and contains "Unauthorized"', check: s => G.bannerContains(s, 'unauthorized'), hint: 'banner motd #Unauthorized access is prohibited#' },
+    { desc: 'Console password is set', check: s => G.consolePasswordSet(s), hint: 'line console 0, then: password ConsolePass1' },
+    { desc: 'Console requires login', check: s => s.lines.console.login !== 'none', hint: 'Inside line console 0: login' }
+  ]
+},
+{
+  id: 10, title: 'Full Router Build (Capstone)', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 30,
+  scenario: 'This is the big one. R1 is a fresh router being deployed as a small branch gateway. Bring it fully into production: addressing, routing, OSPF, and security — everything you practiced in the earlier labs, combined into one build.',
+  requirements: [
+    'Hostname: R1',
+    'Gi0/0: 192.168.1.1 255.255.255.0, up, description "LAN"',
+    'Gi0/1: 10.0.0.1 255.255.255.252, up, description "WAN to ISP Edge"',
+    'Default route via 10.0.0.2',
+    'OSPF process 1, router-id 1.1.1.1, advertise 192.168.1.0/24 into Area 0',
+    'Enable secret: Cisco123!',
+    'Local user "admin" / privilege 15 / secret AdminPass1',
+    'Domain name lab.local + RSA keys generated',
+    'VTY: login local, SSH only',
+    'MOTD banner containing "Unauthorized"'
+  ],
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Hostname is R1', check: s => G.hostnameIs(s, 'R1'), hint: 'hostname R1' },
+    { desc: 'Gi0/0 up with 192.168.1.1/24 and a description', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/0') && G.descriptionSet(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / ip address 192.168.1.1 255.255.255.0 / description LAN / no shutdown' },
+    { desc: 'Gi0/1 up with 10.0.0.1/30 and a description', check: s => G.hasIp(s, 'GigabitEthernet0/1', '10.0.0.1', '255.255.255.252') && G.isUp(s, 'GigabitEthernet0/1') && G.descriptionSet(s, 'GigabitEthernet0/1'), hint: 'interface gi0/1 / ip address 10.0.0.1 255.255.255.252 / description WAN to ISP Edge / no shutdown' },
+    { desc: 'Default route via 10.0.0.2', check: s => G.hasDefaultRoute(s, '10.0.0.2'), hint: 'ip route 0.0.0.0 0.0.0.0 10.0.0.2' },
+    { desc: 'OSPF 1 running with router-id 1.1.1.1', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1'), hint: 'router ospf 1 / router-id 1.1.1.1' },
+    { desc: '192.168.1.0/24 advertised into Area 0', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'network 192.168.1.0 0.0.0.255 area 0' },
+    { desc: 'Enable secret configured', check: s => G.enableSecretSet(s), hint: 'enable secret Cisco123!' },
+    { desc: 'admin user, privilege 15, secret set', check: s => G.userExists(s, 'admin', { privilege: 15, hasSecret: true }), hint: 'username admin privilege 15 secret AdminPass1' },
+    { desc: 'Domain name set + RSA keys generated', check: s => G.domainNameIs(s, 'lab.local') && G.cryptoKeyGenerated(s), hint: 'ip domain-name lab.local, then: crypto key generate rsa' },
+    { desc: 'VTY: login local + SSH-only', check: s => G.vtyLoginLocal(s) && G.vtyTransportIs(s, ['ssh']), hint: 'line vty 0 4 / login local / transport input ssh' },
+    { desc: 'Banner contains "Unauthorized"', check: s => G.bannerContains(s, 'unauthorized'), hint: 'banner motd #Unauthorized access is prohibited#' }
+  ]
+}
+);
+
+
+// ============================================================
+// Labs 11-40 (v2 expansion). Appended to LABS after labs 1-10.
+// ============================================================
+
+LABS.push(
+{
+  id: 11, title: 'Standard ACL — Restrict Telnet Access', difficulty: 'Medium', domain: 'Security Fundamentals', est: 12,
+  scenario: 'Only the management subnet (10.0.0.0/24) should be allowed to reach R1 remotely. Build a standard ACL and apply it to the VTY lines.',
+  requirements: [
+    'Create standard ACL 10 permitting 10.0.0.0 0.0.0.255',
+    'Deny everything else implicitly (no extra line needed — standard ACLs deny by default)',
+    'Apply ACL 10 to the VTY lines (0 4) as an inbound access-class'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'ACL 10 exists with a permit rule for 10.0.0.0 0.0.0.255', check: s => G.aclHasRule(s, 10, 'permit', '10.0.0.0 0.0.0.255'), hint: 'access-list 10 permit 10.0.0.0 0.0.0.255' },
+    { desc: 'ACL 10 is applied to VTY 0-4 as inbound access-class', check: s => G.vtyAccessClassIs(s, 10), hint: 'line vty 0 4, then: access-class 10 in' }
+  ]
+},
+{
+  id: 12, title: 'Extended ACL — Web Server Access', difficulty: 'Medium', domain: 'Security Fundamentals', est: 15,
+  scenario: 'A web server sits behind R1. Only HTTP and HTTPS traffic from anywhere should reach it; everything else inbound on Gi0/1 should be blocked.',
+  requirements: [
+    'Create extended ACL 101 permitting TCP to any destination on port 80 (eq 80)',
+    'Also permit TCP to any destination on port 443 (eq 443)',
+    'Add an explicit deny for all other IP traffic (best practice, even though implicit deny exists)',
+    'Apply ACL 101 inbound on GigabitEthernet0/1'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'ACL 101 permits TCP ... eq 80', check: s => G.aclHasRule(s, 101, 'permit', 'eq 80'), hint: 'access-list 101 permit tcp any any eq 80' },
+    { desc: 'ACL 101 permits TCP ... eq 443', check: s => G.aclHasRule(s, 101, 'permit', 'eq 443'), hint: 'access-list 101 permit tcp any any eq 443' },
+    { desc: 'ACL 101 has an explicit deny statement', check: s => G.aclHasRule(s, 101, 'deny'), hint: 'access-list 101 deny ip any any' },
+    { desc: 'ACL 101 applied inbound on Gi0/1', check: s => G.aclAppliedIn(s, 'GigabitEthernet0/1', 101), hint: 'interface gi0/1, then: ip access-group 101 in' }
+  ]
+},
+{
+  id: 13, title: 'Static NAT for a Public-Facing Server', difficulty: 'Medium', domain: 'IP Services', est: 12,
+  scenario: 'An internal mail server at 192.168.1.25 needs a permanent, predictable public address so external partners can always reach it at the same IP.',
+  requirements: [
+    'Mark GigabitEthernet0/0 (LAN) as the NAT inside interface',
+    'Mark GigabitEthernet0/1 (WAN) as the NAT outside interface',
+    'Create a static NAT mapping: inside local 192.168.1.25 to inside global 203.0.113.25'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Gi0/0 marked NAT inside', check: s => G.natSideIs(s, 'GigabitEthernet0/0', 'inside'), hint: 'interface gi0/0, then: ip nat inside' },
+    { desc: 'Gi0/1 marked NAT outside', check: s => G.natSideIs(s, 'GigabitEthernet0/1', 'outside'), hint: 'interface gi0/1, then: ip nat outside' },
+    { desc: 'Static mapping 192.168.1.25 → 203.0.113.25 exists', check: s => G.hasNatStatic(s, '192.168.1.25', '203.0.113.25'), hint: 'ip nat inside source static 192.168.1.25 203.0.113.25' }
+  ]
+},
+{
+  id: 14, title: 'NAT Overload (PAT) for the Whole LAN', difficulty: 'Medium', domain: 'IP Services', est: 15,
+  scenario: 'The entire 192.168.1.0/24 LAN needs internet access but R1 only has one public IP on its WAN interface. Configure PAT so every internal host shares that single address.',
+  requirements: [
+    'Create standard ACL 1 permitting the 192.168.1.0/24 network',
+    'Mark Gi0/0 as NAT inside and Gi0/1 as NAT outside',
+    'Configure NAT overload referencing ACL 1, using Gi0/1 as the outside interface'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'ACL 1 permits 192.168.1.0 0.0.0.255', check: s => G.aclHasRule(s, 1, 'permit', '192.168.1.0 0.0.0.255'), hint: 'access-list 1 permit 192.168.1.0 0.0.0.255' },
+    { desc: 'Gi0/0 is NAT inside, Gi0/1 is NAT outside', check: s => G.natSideIs(s, 'GigabitEthernet0/0', 'inside') && G.natSideIs(s, 'GigabitEthernet0/1', 'outside'), hint: 'ip nat inside (on gi0/0) / ip nat outside (on gi0/1)' },
+    { desc: 'NAT overload configured referencing ACL 1', check: s => G.hasNatOverload(s, 1), hint: 'ip nat inside source list 1 interface gi0/1 overload' }
+  ]
+},
+{
+  id: 15, title: 'DHCP Server Configuration', difficulty: 'Easy', domain: 'IP Services', est: 12,
+  scenario: 'R1 will act as the DHCP server for the LAN. Reserve the first 10 addresses for static devices, then build the pool.',
+  requirements: [
+    'Exclude addresses 192.168.1.1 through 192.168.1.10 from the DHCP pool',
+    'Create a DHCP pool named LAN_POOL for network 192.168.1.0 255.255.255.0',
+    'Set the default router (gateway) to 192.168.1.1',
+    'Set the DNS server to 8.8.8.8'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Addresses .1–.10 excluded from DHCP', check: s => G.hasDhcpExclusion(s, '192.168.1.1', '192.168.1.10'), hint: 'ip dhcp excluded-address 192.168.1.1 192.168.1.10' },
+    { desc: 'Pool LAN_POOL covers 192.168.1.0/24', check: s => G.dhcpPoolNetwork(s, 'LAN_POOL', '192.168.1.0', '255.255.255.0'), hint: 'ip dhcp pool LAN_POOL, then: network 192.168.1.0 255.255.255.0' },
+    { desc: 'Default router set to 192.168.1.1', check: s => G.dhcpPoolDefaultRouter(s, 'LAN_POOL', '192.168.1.1'), hint: 'default-router 192.168.1.1' },
+    { desc: 'DNS server set to 8.8.8.8', check: s => G.dhcpPoolDnsServer(s, 'LAN_POOL', '8.8.8.8'), hint: 'dns-server 8.8.8.8' }
+  ]
+},
+{
+  id: 16, title: 'DHCP Relay Across Subnets', difficulty: 'Easy', domain: 'IP Services', est: 8,
+  scenario: 'The actual DHCP server lives on a different subnet, reachable at 10.0.0.5. Configure R1\'s LAN interface to relay client DHCP broadcasts to it.',
+  requirements: [
+    'On GigabitEthernet0/0 (the LAN-facing interface), configure it to relay DHCP requests to 10.0.0.5'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Gi0/0 has ip helper-address 10.0.0.5', check: s => G.helperAddressIs(s, 'GigabitEthernet0/0', '10.0.0.5'), hint: 'interface gi0/0, then: ip helper-address 10.0.0.5' }
+  ]
+},
+{
+  id: 17, title: 'Port Security on Access Ports', difficulty: 'Medium', domain: 'Security Fundamentals', est: 12,
+  scenario: 'SW1\'s access ports are currently wide open — anyone could plug in an unmanaged switch and flood MAC addresses. Lock each access port down to a single learned device.',
+  requirements: [
+    'On FastEthernet0/1: enable port security, learn the MAC address dynamically as "sticky", limit to 1 device, and shut the port down on violation',
+    'Do the same on FastEthernet0/2'
+  ],
+  initial: () => switchState('SW1', ['FastEthernet0/1', 'FastEthernet0/2']),
+  objectives: [
+    { desc: 'Fa0/1: port security enabled', check: s => G.portSecurityEnabled(s, 'fa0/1'), hint: 'interface fa0/1, then: switchport port-security' },
+    { desc: 'Fa0/1: maximum 1, sticky MAC, violation shutdown', check: s => G.portSecurityMax(s, 'fa0/1', 1) && G.portSecurityStickyMac(s, 'fa0/1') && G.portSecurityViolation(s, 'fa0/1', 'shutdown'), hint: 'switchport port-security maximum 1 / switchport port-security mac-address sticky / switchport port-security violation shutdown' },
+    { desc: 'Fa0/2: port security enabled, max 1, sticky, shutdown', check: s => G.portSecurityEnabled(s, 'fa0/2') && G.portSecurityMax(s, 'fa0/2', 1) && G.portSecurityStickyMac(s, 'fa0/2') && G.portSecurityViolation(s, 'fa0/2', 'shutdown'), hint: 'Repeat the same 3 commands under interface fa0/2' }
+  ]
+},
+{
+  id: 18, title: 'EtherChannel (LACP) Between Switches', difficulty: 'Medium', domain: 'Network Access', est: 15,
+  scenario: 'SW1 and SW2 have two redundant links between them. Bundle both into one LACP EtherChannel for extra bandwidth and to avoid relying on STP to block the redundant link.',
+  requirements: [
+    'Add FastEthernet0/1 to channel-group 1 in active LACP mode',
+    'Add FastEthernet0/2 to channel-group 1 in active LACP mode',
+    'Configure the resulting Port-channel1 interface as a trunk'
+  ],
+  initial: () => switchState('SW1', ['FastEthernet0/1', 'FastEthernet0/2']),
+  objectives: [
+    { desc: 'Fa0/1 in channel-group 1, mode active', check: s => G.channelGroupIs(s, 'fa0/1', 1, 'active'), hint: 'interface fa0/1, then: channel-group 1 mode active' },
+    { desc: 'Fa0/2 in channel-group 1, mode active', check: s => G.channelGroupIs(s, 'fa0/2', 1, 'active'), hint: 'interface fa0/2, then: channel-group 1 mode active' },
+    { desc: 'Port-channel1 is a trunk', check: s => G.isTrunk(s, 'Port-channel1'), hint: 'interface port-channel 1, then: switchport mode trunk' }
+  ]
+},
+{
+  id: 19, title: 'HSRP Gateway Redundancy', difficulty: 'Medium', domain: 'IP Connectivity', est: 15,
+  scenario: 'R1 and R2 both connect to the LAN and should share a single virtual gateway IP via HSRP. R1 should be the preferred (higher-priority) active router.',
+  requirements: [
+    'On R1\'s Gi0/0, configure HSRP group 1 with virtual IP 192.168.1.254',
+    'Set R1\'s priority to 150 (higher than the default 100) so it wins the active role',
+    'Enable preempt so R1 reclaims active status automatically when it comes back online'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'HSRP group 1 virtual IP is 192.168.1.254', check: s => G.hsrpIp(s, 'GigabitEthernet0/0', 1, '192.168.1.254'), hint: 'interface gi0/0, then: standby 1 ip 192.168.1.254' },
+    { desc: 'Priority is 150', check: s => G.hsrpPriority(s, 'GigabitEthernet0/0', 1, 150), hint: 'standby 1 priority 150' },
+    { desc: 'Preempt is enabled', check: s => G.hsrpPreempt(s, 'GigabitEthernet0/0'), hint: 'standby 1 preempt' }
+  ]
+},
+{
+  id: 20, title: 'Spanning Tree Tuning', difficulty: 'Medium', domain: 'Network Access', est: 15,
+  scenario: 'SW1 should always be the root bridge for VLAN 10 in this topology, and its end-user-facing port should transition to forwarding immediately without risking a loop.',
+  requirements: [
+    'Set spanning-tree mode to rapid-pvst for faster convergence',
+    'Make SW1 the root primary for VLAN 10',
+    'Enable PortFast on FastEthernet0/1 (an end-user access port)',
+    'Enable BPDU Guard on FastEthernet0/1'
+  ],
+  initial: () => switchState('SW1', ['FastEthernet0/1']),
+  objectives: [
+    { desc: 'STP mode is rapid-pvst', check: s => G.stpModeIs(s, 'rapid-pvst'), hint: 'spanning-tree mode rapid-pvst' },
+    { desc: 'VLAN 10 root primary on this switch', check: s => G.stpRootRoleIs(s, 10, 'primary'), hint: 'spanning-tree vlan 10 root primary' },
+    { desc: 'PortFast enabled on Fa0/1', check: s => G.portfastEnabled(s, 'fa0/1'), hint: 'interface fa0/1, then: spanning-tree portfast' },
+    { desc: 'BPDU Guard enabled on Fa0/1', check: s => G.bpduguardEnabled(s, 'fa0/1'), hint: 'spanning-tree bpduguard enable' }
+  ]
+}
+);
+LABS.push(
+{
+  id: 21, title: 'Disabling CDP on Untrusted Links', difficulty: 'Easy', domain: 'Security Fundamentals', est: 8,
+  scenario: 'CDP broadcasts device details in clear text. R1\'s WAN interface faces the ISP — an untrusted network — so CDP should be disabled there specifically, while staying enabled internally.',
+  requirements: [
+    'Disable CDP on GigabitEthernet0/1 only (the ISP-facing interface)',
+    'Leave CDP running globally and on other interfaces'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'CDP disabled on Gi0/1', check: s => G.cdpDisabledOn(s, 'GigabitEthernet0/1'), hint: 'interface gi0/1, then: no cdp enable' },
+    { desc: 'CDP still enabled on Gi0/0 (not disabled)', check: s => !G.cdpDisabledOn(s, 'GigabitEthernet0/0'), hint: 'Don\'t run "no cdp enable" on gi0/0 — leave it alone' },
+    { desc: 'CDP still running globally', check: s => !G.cdpGloballyDisabled(s), hint: 'Don\'t run the global "no cdp run" command — only disable it per-interface' }
+  ]
+},
+{
+  id: 22, title: 'IPv6 Addressing Basics', difficulty: 'Easy', domain: 'IP Connectivity', est: 10,
+  scenario: 'R1 is being prepared for IPv6. Enable IPv6 routing and assign an address to the LAN interface.',
+  requirements: [
+    'Enable IPv6 unicast routing globally',
+    'Assign 2001:db8:1::1/64 to GigabitEthernet0/0',
+    'Bring the interface up'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'IPv6 unicast-routing enabled', check: s => G.ipv6UnicastRoutingOn(s), hint: 'From global config: ipv6 unicast-routing' },
+    { desc: 'Gi0/0 has IPv6 address 2001:db8:1::1', check: s => G.ipv6AddressIs(s, 'GigabitEthernet0/0', '2001:db8:1::1'), hint: 'interface gi0/0, then: ipv6 address 2001:db8:1::1/64' },
+    { desc: 'Gi0/0 is up', check: s => G.isUp(s, 'GigabitEthernet0/0'), hint: 'no shutdown' }
+  ]
+},
+{
+  id: 23, title: 'IPv6 Static Routing', difficulty: 'Easy', domain: 'IP Connectivity', est: 10,
+  scenario: 'R1 needs a static route to a remote IPv6 network reachable through its directly connected neighbor.',
+  requirements: [
+    'Enable IPv6 unicast routing',
+    'Configure Gi0/0 with address 2001:db8:1::1/64 and bring it up',
+    'Add a static IPv6 route to 2001:db8:9::/64 via next-hop 2001:db8:1::2'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'IPv6 unicast-routing enabled', check: s => G.ipv6UnicastRoutingOn(s), hint: 'ipv6 unicast-routing' },
+    { desc: 'Gi0/0 addressed and up', check: s => G.ipv6AddressIs(s, 'GigabitEthernet0/0', '2001:db8:1::1') && G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / ipv6 address 2001:db8:1::1/64 / no shutdown' },
+    { desc: 'Static route to 2001:db8:9::/64 via 2001:db8:1::2', check: s => G.ipv6HasRoute(s, '2001:db8:9::/64', '2001:db8:1::2'), hint: 'ipv6 route 2001:db8:9::/64 2001:db8:1::2' }
+  ]
+},
+{
+  id: 24, title: 'OSPFv3 for IPv6', difficulty: 'Medium', domain: 'IP Connectivity', est: 15,
+  scenario: 'R1 needs to run OSPF for its IPv6 network. Unlike OSPFv2, OSPFv3 is enabled directly on the interface rather than through network statements.',
+  requirements: [
+    'Enable IPv6 unicast routing',
+    'Configure Gi0/0 with 2001:db8:1::1/64, up',
+    'Start OSPFv3 process 1 with router-id 3.3.3.3',
+    'Enable OSPFv3 process 1 in Area 0 directly on Gi0/0'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'IPv6 unicast-routing enabled', check: s => G.ipv6UnicastRoutingOn(s), hint: 'ipv6 unicast-routing' },
+    { desc: 'Gi0/0 addressed and up', check: s => G.ipv6AddressIs(s, 'GigabitEthernet0/0', '2001:db8:1::1') && G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / ipv6 address 2001:db8:1::1/64 / no shutdown' },
+    { desc: 'OSPFv3 process 1 router-id is 3.3.3.3', check: s => G.ospfv3RouterIdIs(s, '3.3.3.3'), hint: 'ipv6 router ospf 1, then: router-id 3.3.3.3' },
+    { desc: 'OSPFv3 enabled on Gi0/0 in Area 0', check: s => G.ipv6OspfEnabledOn(s, 'GigabitEthernet0/0', 1, 0), hint: 'Inside interface gi0/0: ipv6 ospf 1 area 0' }
+  ]
+},
+{
+  id: 25, title: 'Basic EIGRP', difficulty: 'Medium', domain: 'IP Connectivity', est: 15,
+  scenario: 'R1 has two directly connected networks that need to be advertised via EIGRP autonomous system 100, without automatic summarization (which can cause problems in discontiguous networks).',
+  requirements: [
+    'Configure Gi0/0 (192.168.1.1/24) and Gi0/1 (10.0.0.1/30), both up',
+    'Start EIGRP AS 100',
+    'Advertise both connected networks',
+    'Disable auto-summary'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Gi0/0 & Gi0/1 configured and up', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/0') && G.hasIp(s, 'GigabitEthernet0/1', '10.0.0.1', '255.255.255.252') && G.isUp(s, 'GigabitEthernet0/1'), hint: 'Configure both interfaces with the given IPs and no shutdown' },
+    { desc: 'EIGRP AS 100 is running', check: s => G.eigrpEnabled(s, 100), hint: 'router eigrp 100' },
+    { desc: '192.168.1.0 advertised', check: s => G.eigrpAdvertisesNetwork(s, '192.168.1.0'), hint: 'network 192.168.1.0 0.0.0.255' },
+    { desc: '10.0.0.0 advertised', check: s => G.eigrpAdvertisesNetwork(s, '10.0.0.0'), hint: 'network 10.0.0.0 0.0.0.3' },
+    { desc: 'Auto-summary disabled', check: s => G.eigrpNoAutoSummary(s), hint: 'no auto-summary' }
+  ]
+},
+{
+  id: 26, title: 'Redistributing Static Routes into OSPF', difficulty: 'Hard', domain: 'IP Connectivity', est: 18,
+  scenario: 'R1 has a static route to a partner network that isn\'t part of the OSPF domain. The rest of the OSPF routers need to learn about it too, so redistribute it.',
+  requirements: [
+    'Add a static route to 172.20.0.0 255.255.0.0 via 192.168.1.254',
+    'Start OSPF process 1 with router-id 5.5.5.5',
+    'Advertise 192.168.1.0/24 into Area 0',
+    'Redistribute static routes into OSPF'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Static route to 172.20.0.0/16 exists', check: s => G.hasRoute(s, '172.20.0.0', '255.255.0.0', '192.168.1.254'), hint: 'ip route 172.20.0.0 255.255.0.0 192.168.1.254' },
+    { desc: 'OSPF 1 running, router-id 5.5.5.5', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '5.5.5.5'), hint: 'router ospf 1 / router-id 5.5.5.5' },
+    { desc: '192.168.1.0/24 advertised into Area 0', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'network 192.168.1.0 0.0.0.255 area 0' },
+    { desc: 'OSPF redistributes static routes', check: s => G.ospfRedistributes(s, 'static'), hint: 'Inside router ospf 1: redistribute static' }
+  ]
+},
+{
+  id: 27, title: 'Floating Static Route as a Backup Path', difficulty: 'Medium', domain: 'IP Connectivity', est: 12,
+  scenario: 'R1\'s primary path to the internet is via OSPF-learned routes. As a safety net, configure a backup default route that only activates if the primary path disappears — by giving it a higher administrative distance than OSPF\'s default of 110.',
+  requirements: [
+    'Start OSPF process 1 (router-id 1.1.1.1) so a primary route source exists',
+    'Configure a floating static default route via 192.168.99.1 with an administrative distance of 200'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'OSPF 1 running with router-id 1.1.1.1', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1'), hint: 'router ospf 1 / router-id 1.1.1.1' },
+    { desc: 'Floating default route via 192.168.99.1 with AD 200', check: s => G.routeHasAd(s, '0.0.0.0', '0.0.0.0', '192.168.99.1', 200), hint: 'ip route 0.0.0.0 0.0.0.0 192.168.99.1 200 — the trailing 200 sets the administrative distance higher than OSPF\'s 110, so it only "floats" into use as a backup' }
+  ]
+},
+{
+  id: 28, title: 'Multi-Area OSPF', difficulty: 'Hard', domain: 'IP Connectivity', est: 20,
+  scenario: 'R1 is an Area Border Router sitting between the backbone and a remote area. It has one interface facing the backbone (Area 0) and one facing the remote site (Area 1).',
+  requirements: [
+    'Configure Gi0/0 (192.168.1.1/24) — backbone-facing — and Gi0/1 (192.168.2.1/24) — Area 1-facing — both up',
+    'Start OSPF process 1, router-id 10.10.10.10',
+    'Advertise 192.168.1.0/24 into Area 0',
+    'Advertise 192.168.2.0/24 into Area 1'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Both interfaces configured and up', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/0') && G.hasIp(s, 'GigabitEthernet0/1', '192.168.2.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/1'), hint: 'Configure and no-shutdown both Gi0/0 and Gi0/1' },
+    { desc: 'OSPF 1 router-id 10.10.10.10', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '10.10.10.10'), hint: 'router ospf 1 / router-id 10.10.10.10' },
+    { desc: '192.168.1.0/24 in Area 0', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'network 192.168.1.0 0.0.0.255 area 0' },
+    { desc: '192.168.2.0/24 in Area 1', check: s => G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 1), hint: 'network 192.168.2.0 0.0.0.255 area 1' }
+  ]
+},
+{
+  id: 29, title: 'GRE Tunnel Between Two Sites', difficulty: 'Hard', domain: 'IP Connectivity', est: 18,
+  scenario: 'R1 needs a GRE tunnel across the public internet to Branch2 (203.0.113.2), so the two sites can exchange private-range traffic over an otherwise public path.',
+  requirements: [
+    'Configure the physical WAN interface Gi0/1 with 203.0.113.1 255.255.255.252, up',
+    'Create Tunnel0 with source 203.0.113.1 and destination 203.0.113.2',
+    'Address the tunnel interface 172.16.0.1 255.255.255.252 and bring it up'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Gi0/1 (physical WAN) configured and up', check: s => G.hasIp(s, 'GigabitEthernet0/1', '203.0.113.1', '255.255.255.252') && G.isUp(s, 'GigabitEthernet0/1'), hint: 'interface gi0/1 / ip address 203.0.113.1 255.255.255.252 / no shutdown' },
+    { desc: 'Tunnel0 source/destination set', check: s => G.tunnelConfigured(s, 'Tunnel0', '203.0.113.1', '203.0.113.2'), hint: 'interface tunnel 0 / tunnel source 203.0.113.1 / tunnel destination 203.0.113.2' },
+    { desc: 'Tunnel0 addressed and up', check: s => G.hasIp(s, 'Tunnel0', '172.16.0.1', '255.255.255.252') && G.isUp(s, 'Tunnel0'), hint: 'ip address 172.16.0.1 255.255.255.252 / no shutdown' }
+  ]
+},
+{
+  id: 30, title: 'Centralized Logging, NTP & AAA', difficulty: 'Medium', domain: 'Security Fundamentals', est: 15,
+  scenario: 'For proper auditing, R1 needs accurate timestamps and centralized logging, plus AAA configured to authenticate against local accounts.',
+  requirements: [
+    'Point syslog at 10.0.0.100',
+    'Sync time with NTP server 192.5.41.41',
+    'Enable the AAA subsystem (aaa new-model)',
+    'Set the default login authentication method to use the local user database'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Syslog host 10.0.0.100 configured', check: s => G.loggingHostSet(s, '10.0.0.100'), hint: 'logging host 10.0.0.100' },
+    { desc: 'NTP server 192.5.41.41 configured', check: s => G.ntpServerSet(s, '192.5.41.41'), hint: 'ntp server 192.5.41.41' },
+    { desc: 'aaa new-model enabled', check: s => G.aaaNewModelOn(s), hint: 'aaa new-model' },
+    { desc: 'Default login authentication uses local database', check: s => G.aaaAuthLoginUsesLocal(s), hint: 'aaa authentication login default local' }
+  ]
+}
+);
+LABS.push(
+{
+  id: 31, title: 'Router-on-a-Stick with Inter-VLAN ACL', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 22,
+  scenario: 'R1 routes between VLAN 10 (Sales) and VLAN 20 (Finance) over a trunk. Finance is sensitive — Sales should not be able to initiate connections into the Finance subnet.',
+  requirements: [
+    'Bring up the physical trunk interface Gi0/0',
+    'Subinterface Gi0/0.10: encapsulation dot1Q 10, IP 192.168.10.1/24',
+    'Subinterface Gi0/0.20: encapsulation dot1Q 20, IP 192.168.20.1/24',
+    'Extended ACL 100: deny IP from 192.168.10.0/24 to 192.168.20.0/24, then permit everything else',
+    'Apply ACL 100 inbound on the Gi0/0.10 subinterface'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Physical Gi0/0 is up', check: s => G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / no shutdown' },
+    { desc: 'Gi0/0.10 encapsulated VLAN 10 with correct IP', check: s => G.encapsulationIs(s, 'GigabitEthernet0/0.10', 10) && G.hasIp(s, 'GigabitEthernet0/0.10', '192.168.10.1', '255.255.255.0'), hint: 'interface gi0/0.10 / encapsulation dot1Q 10 / ip address 192.168.10.1 255.255.255.0' },
+    { desc: 'Gi0/0.20 encapsulated VLAN 20 with correct IP', check: s => G.encapsulationIs(s, 'GigabitEthernet0/0.20', 20) && G.hasIp(s, 'GigabitEthernet0/0.20', '192.168.20.1', '255.255.255.0'), hint: 'interface gi0/0.20 / encapsulation dot1Q 20 / ip address 192.168.20.1 255.255.255.0' },
+    { desc: 'ACL 100 denies Sales → Finance', check: s => G.aclHasRule(s, 100, 'deny', '192.168.10.0 0.0.0.255'), hint: 'access-list 100 deny ip 192.168.10.0 0.0.0.255 192.168.20.0 0.0.0.255' },
+    { desc: 'ACL 100 has a permit statement too', check: s => G.aclHasRule(s, 100, 'permit'), hint: 'access-list 100 permit ip any any' },
+    { desc: 'ACL 100 applied inbound on Gi0/0.10', check: s => G.aclAppliedIn(s, 'GigabitEthernet0/0.10', 100), hint: 'Inside interface gi0/0.10: ip access-group 100 in' }
+  ]
+},
+{
+  id: 32, title: 'Access-Layer Switch Hardening Capstone', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 25,
+  scenario: 'SW1 is a new access-layer switch going into a public-facing office area. Combine everything you know about VLANs and Layer 2 security into one hardened build.',
+  requirements: [
+    'Create VLAN 10 (USERS) and assign Fa0/1 and Fa0/2 as access ports in it',
+    'Enable port security on both ports: max 1, sticky MAC, violation shutdown',
+    'Enable PortFast and BPDU Guard on both ports',
+    'Set spanning-tree mode to rapid-pvst'
+  ],
+  initial: () => switchState('SW1', ['FastEthernet0/1', 'FastEthernet0/2']),
+  objectives: [
+    { desc: 'VLAN 10 named USERS', check: s => G.vlanExists(s, 10, 'USERS'), hint: 'vlan 10 / name USERS' },
+    { desc: 'Fa0/1 & Fa0/2 access ports in VLAN 10', check: s => G.accessVlanIs(s, 'fa0/1', 10) && G.accessVlanIs(s, 'fa0/2', 10), hint: 'switchport mode access / switchport access vlan 10 on each' },
+    { desc: 'Port security: max 1, sticky, shutdown on Fa0/1', check: s => G.portSecurityMax(s, 'fa0/1', 1) && G.portSecurityStickyMac(s, 'fa0/1') && G.portSecurityViolation(s, 'fa0/1', 'shutdown'), hint: 'switchport port-security / maximum 1 / mac-address sticky / violation shutdown' },
+    { desc: 'Port security: max 1, sticky, shutdown on Fa0/2', check: s => G.portSecurityMax(s, 'fa0/2', 1) && G.portSecurityStickyMac(s, 'fa0/2') && G.portSecurityViolation(s, 'fa0/2', 'shutdown'), hint: 'Same 3 commands under fa0/2' },
+    { desc: 'PortFast + BPDU Guard on Fa0/1 and Fa0/2', check: s => G.portfastEnabled(s, 'fa0/1') && G.bpduguardEnabled(s, 'fa0/1') && G.portfastEnabled(s, 'fa0/2') && G.bpduguardEnabled(s, 'fa0/2'), hint: 'spanning-tree portfast / spanning-tree bpduguard enable — on both ports' },
+    { desc: 'STP mode is rapid-pvst', check: s => G.stpModeIs(s, 'rapid-pvst'), hint: 'spanning-tree mode rapid-pvst' }
+  ]
+},
+{
+  id: 33, title: 'OSPF with Redistribution & Backup Path', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 25,
+  scenario: 'R1 sits at the edge of the OSPF domain. It has a statically-routed partner network to redistribute, and needs a floating backup default route in case its primary uplink fails.',
+  requirements: [
+    'Configure Gi0/0 (192.168.1.1/24), up',
+    'Static route to 172.20.0.0/16 via 192.168.1.254',
+    'Floating default route via 192.168.99.1 with AD 200',
+    'OSPF process 1, router-id 7.7.7.7, advertise 192.168.1.0/24 into Area 0',
+    'Redistribute static routes into OSPF'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Gi0/0 configured and up', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / ip address 192.168.1.1 255.255.255.0 / no shutdown' },
+    { desc: 'Static route to 172.20.0.0/16', check: s => G.hasRoute(s, '172.20.0.0', '255.255.0.0', '192.168.1.254'), hint: 'ip route 172.20.0.0 255.255.0.0 192.168.1.254' },
+    { desc: 'Floating default route, AD 200', check: s => G.routeHasAd(s, '0.0.0.0', '0.0.0.0', '192.168.99.1', 200), hint: 'ip route 0.0.0.0 0.0.0.0 192.168.99.1 200' },
+    { desc: 'OSPF 1, router-id 7.7.7.7, advertises 192.168.1.0/24', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '7.7.7.7') && G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'router ospf 1 / router-id 7.7.7.7 / network 192.168.1.0 0.0.0.255 area 0' },
+    { desc: 'OSPF redistributes static', check: s => G.ospfRedistributes(s, 'static'), hint: 'Inside router ospf 1: redistribute static' }
+  ]
+},
+{
+  id: 34, title: 'Dual-Stack Interface (IPv4 + IPv6)', difficulty: 'Medium', domain: 'IP Connectivity', est: 15,
+  scenario: 'During the IPv6 migration, R1\'s LAN interface needs to run both protocols simultaneously so IPv4-only and IPv6-only clients can both be served.',
+  requirements: [
+    'Enable IPv6 unicast routing',
+    'On Gi0/0: configure IPv4 address 192.168.1.1/24',
+    'On the same interface, also configure IPv6 address 2001:db8:1::1/64',
+    'Bring the interface up'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'IPv6 unicast-routing enabled', check: s => G.ipv6UnicastRoutingOn(s), hint: 'ipv6 unicast-routing' },
+    { desc: 'IPv4 address configured', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0'), hint: 'ip address 192.168.1.1 255.255.255.0' },
+    { desc: 'IPv6 address configured on the same interface', check: s => G.ipv6AddressIs(s, 'GigabitEthernet0/0', '2001:db8:1::1'), hint: 'ipv6 address 2001:db8:1::1/64' },
+    { desc: 'Interface is up', check: s => G.isUp(s, 'GigabitEthernet0/0'), hint: 'no shutdown' }
+  ]
+},
+{
+  id: 35, title: 'Selective NAT — Only One Subnet Translated', difficulty: 'Hard', domain: 'IP Services', est: 18,
+  scenario: 'R1\'s LAN has two subnets: 192.168.1.0/24 (general users, needs internet via NAT) and 192.168.2.0/24 (a lab network that should never be translated or reach the internet). Build an ACL that only matches the first subnet for NAT purposes.',
+  requirements: [
+    'Create ACL 1 permitting only 192.168.1.0/24 (do not include 192.168.2.0/24 — leaving it out means it\'s implicitly excluded from NAT)',
+    'Mark Gi0/0 as NAT inside and Gi0/1 as NAT outside',
+    'Configure NAT overload referencing ACL 1 out Gi0/1'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'ACL 1 permits 192.168.1.0/24', check: s => G.aclHasRule(s, 1, 'permit', '192.168.1.0 0.0.0.255'), hint: 'access-list 1 permit 192.168.1.0 0.0.0.255' },
+    { desc: 'ACL 1 does NOT contain a rule for 192.168.2.0', check: s => !G.aclHasRule(s, 1, 'permit', '192.168.2.0'), hint: 'Don\'t add a line for 192.168.2.0 — leaving it out is what excludes it from translation' },
+    { desc: 'Gi0/0 inside, Gi0/1 outside', check: s => G.natSideIs(s, 'GigabitEthernet0/0', 'inside') && G.natSideIs(s, 'GigabitEthernet0/1', 'outside'), hint: 'ip nat inside (gi0/0) / ip nat outside (gi0/1)' },
+    { desc: 'NAT overload references ACL 1', check: s => G.hasNatOverload(s, 1), hint: 'ip nat inside source list 1 interface gi0/1 overload' }
+  ]
+},
+{
+  id: 36, title: 'DHCP Pool Fine-Tuning', difficulty: 'Medium', domain: 'IP Services', est: 12,
+  scenario: 'Refine the DHCP setup: the first 5 and last 5 addresses in the subnet are reserved for infrastructure, and the pool needs a properly configured gateway and DNS.',
+  requirements: [
+    'Exclude 192.168.1.1 through 192.168.1.5',
+    'Exclude 192.168.1.250 through 192.168.1.254',
+    'Create pool OFFICE_POOL for 192.168.1.0/24',
+    'Default router 192.168.1.1, DNS server 1.1.1.1'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Low-end exclusion .1–.5', check: s => G.hasDhcpExclusion(s, '192.168.1.1', '192.168.1.5'), hint: 'ip dhcp excluded-address 192.168.1.1 192.168.1.5' },
+    { desc: 'High-end exclusion .250–.254', check: s => G.hasDhcpExclusion(s, '192.168.1.250', '192.168.1.254'), hint: 'ip dhcp excluded-address 192.168.1.250 192.168.1.254' },
+    { desc: 'Pool OFFICE_POOL covers 192.168.1.0/24', check: s => G.dhcpPoolNetwork(s, 'OFFICE_POOL', '192.168.1.0', '255.255.255.0'), hint: 'ip dhcp pool OFFICE_POOL / network 192.168.1.0 255.255.255.0' },
+    { desc: 'Default router & DNS set correctly', check: s => G.dhcpPoolDefaultRouter(s, 'OFFICE_POOL', '192.168.1.1') && G.dhcpPoolDnsServer(s, 'OFFICE_POOL', '1.1.1.1'), hint: 'default-router 192.168.1.1 / dns-server 1.1.1.1' }
+  ]
+},
+{
+  id: 37, title: 'HSRP with Interface Tracking', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 18,
+  scenario: 'R1 is the primary HSRP gateway, but if its WAN uplink fails, it should automatically lower its priority so R2 (the standby) can take over — rather than staying "active" while actually unable to reach the internet.',
+  requirements: [
+    'On Gi0/0 (LAN side): HSRP group 1, virtual IP 192.168.1.254, priority 150, preempt enabled',
+    'Also configure interface tracking on group 1 so priority decrements if the tracked object (the WAN link) goes down'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'HSRP group 1 VIP 192.168.1.254', check: s => G.hsrpIp(s, 'GigabitEthernet0/0', 1, '192.168.1.254'), hint: 'interface gi0/0 / standby 1 ip 192.168.1.254' },
+    { desc: 'Priority 150', check: s => G.hsrpPriority(s, 'GigabitEthernet0/0', 1, 150), hint: 'standby 1 priority 150' },
+    { desc: 'Preempt enabled', check: s => G.hsrpPreempt(s, 'GigabitEthernet0/0'), hint: 'standby 1 preempt' },
+    { desc: 'Tracking configured on group 1', check: s => G.hsrpTrack(s, 'GigabitEthernet0/0'), hint: 'standby 1 track 1 decrement 20' }
+  ]
+},
+{
+  id: 38, title: 'EtherChannel with Trunk Tuning', difficulty: 'Hard', domain: 'Network Access', est: 18,
+  scenario: 'SW1 and SW2 need a two-link LACP bundle carrying VLANs 10, 20, and 99, with 99 as a dedicated native VLAN — same trunk best practices as a single link, just applied to the bundle.',
+  requirements: [
+    'Bundle Fa0/1 and Fa0/2 into channel-group 5, LACP active mode',
+    'Configure Port-channel5 as a trunk',
+    'Set its native VLAN to 99',
+    'Restrict the allowed VLANs to 10, 20, and 99'
+  ],
+  initial: () => switchState('SW1', ['FastEthernet0/1', 'FastEthernet0/2']),
+  objectives: [
+    { desc: 'Fa0/1 & Fa0/2 in channel-group 5 active', check: s => G.channelGroupIs(s, 'fa0/1', 5, 'active') && G.channelGroupIs(s, 'fa0/2', 5, 'active'), hint: 'channel-group 5 mode active on both fa0/1 and fa0/2' },
+    { desc: 'Port-channel5 is a trunk', check: s => G.isTrunk(s, 'Port-channel5'), hint: 'interface port-channel 5 / switchport mode trunk' },
+    { desc: 'Native VLAN 99 on Port-channel5', check: s => G.nativeVlanIs(s, 'Port-channel5', 99), hint: 'switchport trunk native vlan 99' },
+    { desc: 'Allowed VLANs 10, 20, 99 on Port-channel5', check: s => G.trunkAllows(s, 'Port-channel5', 10) && G.trunkAllows(s, 'Port-channel5', 20) && G.trunkAllows(s, 'Port-channel5', 99), hint: 'switchport trunk allowed vlan 10,20,99' }
+  ]
+},
+{
+  id: 39, title: 'Distribution Switch Security Capstone', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 25,
+  scenario: 'SW1 is being deployed as a distribution-layer switch. Combine trunk hardening, an uplink facing an untrusted area, and access-port security into one hardened configuration.',
+  requirements: [
+    'Configure Gi0/1 as a trunk, native VLAN 99, allowed VLANs 10,20,99, with CDP disabled (it faces a semi-trusted demarc)',
+    'Configure Fa0/1 as an access port in VLAN 10 with port security (max 1, sticky, violation shutdown), PortFast, and BPDU Guard',
+    'Set spanning-tree mode to rapid-pvst and make this switch root primary for VLAN 10'
+  ],
+  initial: () => switchState('SW1', ['GigabitEthernet0/1', 'FastEthernet0/1']),
+  objectives: [
+    { desc: 'Gi0/1 trunk, native 99, allows 10/20/99', check: s => G.isTrunk(s, 'gi0/1') && G.nativeVlanIs(s, 'gi0/1', 99) && G.trunkAllows(s, 'gi0/1', 10) && G.trunkAllows(s, 'gi0/1', 20) && G.trunkAllows(s, 'gi0/1', 99), hint: 'switchport mode trunk / switchport trunk native vlan 99 / switchport trunk allowed vlan 10,20,99' },
+    { desc: 'CDP disabled on Gi0/1', check: s => G.cdpDisabledOn(s, 'gi0/1'), hint: 'no cdp enable' },
+    { desc: 'Fa0/1 access VLAN 10 with full port security', check: s => G.accessVlanIs(s, 'fa0/1', 10) && G.portSecurityMax(s, 'fa0/1', 1) && G.portSecurityStickyMac(s, 'fa0/1') && G.portSecurityViolation(s, 'fa0/1', 'shutdown'), hint: 'switchport mode access / switchport access vlan 10 / switchport port-security / maximum 1 / mac-address sticky / violation shutdown' },
+    { desc: 'Fa0/1 has PortFast + BPDU Guard', check: s => G.portfastEnabled(s, 'fa0/1') && G.bpduguardEnabled(s, 'fa0/1'), hint: 'spanning-tree portfast / spanning-tree bpduguard enable' },
+    { desc: 'rapid-pvst + root primary for VLAN 10', check: s => G.stpModeIs(s, 'rapid-pvst') && G.stpRootRoleIs(s, 10, 'primary'), hint: 'spanning-tree mode rapid-pvst / spanning-tree vlan 10 root primary' }
+  ]
+},
+{
+  id: 40, title: 'Enterprise Edge Router — Full Build', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 35,
+  scenario: 'The final challenge. R1 is a dual-stack enterprise edge router: IPv4 and IPv6 routing, NAT for IPv4 internet access, OSPF for internal routing on both protocols, and full security hardening. Bring it all together.',
+  requirements: [
+    'Hostname R1',
+    'Gi0/0 (LAN): 192.168.1.1/24 and IPv6 2001:db8:1::1/64, up',
+    'Gi0/1 (WAN): 203.0.113.1/30, up, NAT outside',
+    'Gi0/0 also marked NAT inside',
+    'IPv6 unicast-routing enabled',
+    'ACL 1 permits 192.168.1.0/24; NAT overload via ACL 1 out Gi0/1',
+    'OSPF process 1, router-id 1.1.1.1, advertise 192.168.1.0/24 into Area 0',
+    'OSPFv3 process 1, router-id 1.1.1.1, enabled on Gi0/0 in Area 0',
+    'Enable secret set; local admin/privilege 15/secret account created',
+    'Domain name + RSA keys generated; VTY login local + SSH only',
+    'MOTD banner containing "Unauthorized"'
+  ],
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Hostname is R1', check: s => G.hostnameIs(s, 'R1'), hint: 'hostname R1' },
+    { desc: 'Gi0/0: IPv4 + IPv6 addressed, up, NAT inside', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0') && G.ipv6AddressIs(s, 'GigabitEthernet0/0', '2001:db8:1::1') && G.isUp(s, 'GigabitEthernet0/0') && G.natSideIs(s, 'GigabitEthernet0/0', 'inside'), hint: 'ip address 192.168.1.1 255.255.255.0 / ipv6 address 2001:db8:1::1/64 / ip nat inside / no shutdown' },
+    { desc: 'Gi0/1: addressed, up, NAT outside', check: s => G.hasIp(s, 'GigabitEthernet0/1', '203.0.113.1', '255.255.255.252') && G.isUp(s, 'GigabitEthernet0/1') && G.natSideIs(s, 'GigabitEthernet0/1', 'outside'), hint: 'ip address 203.0.113.1 255.255.255.252 / ip nat outside / no shutdown' },
+    { desc: 'IPv6 unicast-routing enabled', check: s => G.ipv6UnicastRoutingOn(s), hint: 'ipv6 unicast-routing' },
+    { desc: 'NAT overload configured via ACL 1', check: s => G.aclHasRule(s, 1, 'permit', '192.168.1.0 0.0.0.255') && G.hasNatOverload(s, 1), hint: 'access-list 1 permit 192.168.1.0 0.0.0.255 / ip nat inside source list 1 interface gi0/1 overload' },
+    { desc: 'OSPFv2: process 1, router-id 1.1.1.1, advertises LAN', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1') && G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'router ospf 1 / router-id 1.1.1.1 / network 192.168.1.0 0.0.0.255 area 0' },
+    { desc: 'OSPFv3: process 1, router-id 1.1.1.1, enabled on Gi0/0 area 0', check: s => G.ospfv3RouterIdIs(s, '1.1.1.1') && G.ipv6OspfEnabledOn(s, 'GigabitEthernet0/0', 1, 0), hint: 'ipv6 router ospf 1 / router-id 1.1.1.1 — then on gi0/0: ipv6 ospf 1 area 0' },
+    { desc: 'Enable secret + admin user configured', check: s => G.enableSecretSet(s) && G.userExists(s, 'admin', { privilege: 15, hasSecret: true }), hint: 'enable secret ... / username admin privilege 15 secret ...' },
+    { desc: 'Domain name + RSA keys generated', check: s => !!s.domainName && G.cryptoKeyGenerated(s), hint: 'ip domain-name ... then: crypto key generate rsa' },
+    { desc: 'VTY: login local + SSH-only', check: s => G.vtyLoginLocal(s) && G.vtyTransportIs(s, ['ssh']), hint: 'line vty 0 4 / login local / transport input ssh' },
+    { desc: 'Banner contains "Unauthorized"', check: s => G.bannerContains(s, 'unauthorized'), hint: 'banner motd #Unauthorized access is prohibited#' }
+  ]
+}
+);
+
+if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
+
+    </script>
+    <script>
+        // ===== Top-level tab switching =====
+        function switchTopTab(tab) {
+            document.getElementById('exams-tab').classList.toggle('hidden', tab !== 'exams');
+            document.getElementById('labs-tab').classList.toggle('hidden', tab !== 'labs');
+            document.getElementById('tab-btn-exams').classList.toggle('active', tab === 'exams');
+            document.getElementById('tab-btn-labs').classList.toggle('active', tab === 'labs');
+            if (tab === 'labs' && !document.getElementById('lab-grid').childElementCount) {
+                renderLabGrid();
+            }
+        }
+
+        // ===== CLI Labs =====
+        let currentLab = null;
+        let labState = null;
+        let labCtx = null;
+        let terminalHistory = [];
+        let terminalHistoryPos = -1;
+
+        function renderLabGrid() {
+            const grid = document.getElementById('lab-grid');
+            grid.innerHTML = '';
+            LABS.forEach(lab => {
+                const div = document.createElement('div');
+                div.className = 'lab-card';
+                div.onclick = () => startLab(lab.id);
+                div.innerHTML = `<div class="lab-meta">
+                        <span class="lab-badge diff-${lab.difficulty}">${lab.difficulty}</span>
+                        <span class="lab-badge">${lab.domain}</span>
+                        <span class="lab-badge">~${lab.est} min</span>
+                    </div>
+                    <h3>Lab ${lab.id}: ${lab.title}</h3>
+                    <p>${lab.scenario}</p>`;
+                grid.appendChild(div);
+            });
+        }
+
+        function startLab(labId) {
+            currentLab = LABS.find(l => l.id === labId);
+            labState = currentLab.initial();
+            labCtx = newCtx();
+            terminalHistory = [];
+            terminalHistoryPos = -1;
+
+            document.getElementById('lab-menu-view').classList.add('hidden');
+            document.getElementById('lab-workspace-view').classList.remove('hidden');
+            document.getElementById('lab-title-display').innerText = `Lab ${currentLab.id}: ${currentLab.title}`;
+            document.getElementById('lab-device-name').innerText = labState.hostname;
+            document.getElementById('lab-scenario-text').innerText = currentLab.scenario;
+
+            const reqList = document.getElementById('lab-requirements');
+            reqList.innerHTML = currentLab.requirements.map(r => `<li>${escapeHtml(r)}</li>`).join('');
+
+            document.getElementById('terminal-body').innerHTML = '';
+            appendTerminalRaw('Simulated IOS terminal ready. Type commands below (Enter to run, ↑/↓ for history).');
+            renderObjectives([]);
+            updatePrompt();
+            document.getElementById('terminal-input').value = '';
+            document.getElementById('terminal-input').focus();
+        }
+
+        function backToLabMenu() {
+            document.getElementById('lab-workspace-view').classList.add('hidden');
+            document.getElementById('lab-menu-view').classList.remove('hidden');
+        }
+
+        function resetLab() {
+            if (!currentLab) return;
+            startLab(currentLab.id);
+        }
+
+        function updatePrompt() {
+            document.getElementById('lab-device-name').innerText = labState.hostname;
+            document.getElementById('terminal-prompt').innerText = promptFor(labState, labCtx);
+        }
+
+        function appendTerminalRaw(text, cls) {
+            const body = document.getElementById('terminal-body');
+            const div = document.createElement('div');
+            if (cls) div.className = cls;
+            div.innerText = text;
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function handleTerminalKey(e) {
+            const input = document.getElementById('terminal-input');
+            if (e.key === 'Enter') {
+                const line = input.value;
+                const promptText = promptFor(labState, labCtx);
+                appendTerminalRaw(promptText + ' ' + line, 'terminal-line-cmd');
+                if (line.trim() !== '') { terminalHistory.push(line); terminalHistoryPos = terminalHistory.length; }
+                const result = runCommand(labState, labCtx, line);
+                (result.output || []).forEach(l => appendTerminalRaw(l, result.illegal ? 'terminal-line-error' : ''));
+                updatePrompt();
+                input.value = '';
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (terminalHistoryPos > 0) { terminalHistoryPos--; input.value = terminalHistory[terminalHistoryPos] || ''; }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (terminalHistoryPos < terminalHistory.length - 1) { terminalHistoryPos++; input.value = terminalHistory[terminalHistoryPos] || ''; }
+                else { terminalHistoryPos = terminalHistory.length; input.value = ''; }
+            }
+        }
+
+        function renderObjectives(results) {
+            const ul = document.getElementById('lab-objectives');
+            ul.innerHTML = '';
+            currentLab.objectives.forEach((o, idx) => {
+                const r = results[idx];
+                const li = document.createElement('li');
+                li.className = 'obj-item' + (r && r.pass ? ' pass' : ' fail');
+                li.onclick = () => li.classList.toggle('show-hint');
+                const icon = r && r.pass ? '✓' : '○';
+                li.innerHTML = `<span class="obj-icon">${icon}</span>${escapeHtml(o.desc)}<div class="obj-hint">Hint: ${escapeHtml(o.hint)}</div>`;
+                ul.appendChild(li);
+            });
+            const passCount = results.filter(r => r && r.pass).length;
+            document.getElementById('lab-obj-count').innerText = results.length ? `(${passCount}/${currentLab.objectives.length})` : `(0/${currentLab.objectives.length})`;
+        }
+
+        function checkLabWork() {
+            const results = currentLab.objectives.map(o => ({ pass: !!o.check(labState) }));
+            renderObjectives(results);
+            const passCount = results.filter(r => r.pass).length;
+            const total = results.length;
+            const banner = document.getElementById('lab-progress-banner');
+            if (passCount === total) {
+                banner.className = 'lab-progress-banner complete';
+                banner.innerText = `✓ Lab complete! All ${total} objectives passed.`;
+            } else {
+                banner.className = 'lab-progress-banner incomplete';
+                banner.innerText = `${passCount}/${total} objectives passed. Click an objective to reveal its hint.`;
+            }
+        }
+
         const examDatabase = { 1: EXAM_1, 2: EXAM_2, 3: EXAM_3, 4: EXAM_4, 5: EXAM_5, 6: EXAM_6, 7: EXAM_7, 8: EXAM_8 };
         const ALL_QUESTIONS = [].concat(EXAM_1, EXAM_2, EXAM_3, EXAM_4, EXAM_5, EXAM_6, EXAM_7, EXAM_8);
 
