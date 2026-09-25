@@ -79,6 +79,7 @@
         .lab-badge.diff-Easy { color: #86efac; border-color: #166534; }
         .lab-badge.diff-Medium { color: #fde68a; border-color: #854d0e; }
         .lab-badge.diff-Hard { color: #fca5a5; border-color: #7f1d1d; }
+        .lab-badge.trouble { color: #fdba74; border-color: #9a3412; background: rgba(251,146,60,0.08); }
 
         /* Lab workspace */
         .lab-workspace { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 20px; }
@@ -116,7 +117,7 @@
     <div class="container">
         <header>
             <h1>CCNA 200-301 Practice Portal</h1>
-            <p>8 full-length practice exams (800 unique questions) &middot; a randomized mixed-pool mode &middot; and 50 hands-on CLI labs</p>
+            <p>8 full-length practice exams (800 unique questions) &middot; a randomized mixed-pool mode &middot; and 95 hands-on CLI labs</p>
         </header>
 
         <div class="top-tabs">
@@ -206,7 +207,13 @@
         <div id="labs-tab" class="hidden">
         <section id="lab-menu-view" class="card">
             <h2>CLI Practice Labs</h2>
-            <p style="color: var(--text-muted); margin-top: 5px;">A real (simulated) Cisco IOS terminal. Type actual commands — abbreviations work, just like the real CLI. Grading checks the resulting device configuration, not exact command text, so there's more than one valid way to pass each lab. Click any objective to reveal both <strong>how</strong> to do it and <strong>why</strong> it matters.</p>
+            <p style="color: var(--text-muted); margin-top: 5px;">A real (simulated) Cisco IOS terminal. Type actual commands — abbreviations work, just like the real CLI. Grading checks the resulting device configuration, not exact command text, so there's more than one valid way to pass each lab. Click any objective to reveal both <strong>how</strong> to do it and <strong>why</strong> it matters. The 🔧 <strong>Troubleshooting</strong> labs start from an already-configured device with a hidden bug — diagnose and fix it, exam-ticket style.</p>
+            <div id="lab-filter-bar" class="top-tabs" style="margin: 15px 0 0 0; justify-content: flex-start;">
+                <button class="top-tab-btn active" data-filter="all" onclick="filterLabs('all')">All (<span id="count-all"></span>)</button>
+                <button class="top-tab-btn" data-filter="Easy" onclick="filterLabs('Easy')">Easy (<span id="count-easy"></span>)</button>
+                <button class="top-tab-btn" data-filter="Medium" onclick="filterLabs('Medium')">Medium (<span id="count-medium"></span>)</button>
+                <button class="top-tab-btn" data-filter="Hard" onclick="filterLabs('Hard')">Hard (<span id="count-hard"></span>)</button>
+            </div>
             <div id="lab-grid" class="lab-grid"></div>
         </section>
 
@@ -330,8 +337,12 @@ function freshInterface(kind) {
     natSide: null, // 'inside' | 'outside'
     ipv6: null, // { address, prefix }
     ipv6OspfProcess: null, ipv6OspfArea: null,
+    ospfAuthEnabled: false, ospfAuthKey: null, ospfCost: null,
+    voiceVlan: null,
     helperAddress: null,
     channelGroup: null, channelMode: null, // EtherChannel
+    speed: null, duplex: null, // interface speed/duplex
+    dhcpSnoopingTrust: false, // DHCP snooping trust state
     tunnelSource: null, tunnelDestination: null, // GRE
     aclIn: null, aclOut: null // applied ACL numbers
   };
@@ -368,6 +379,10 @@ function freshState(hostname) {
     ntpServers: [],
     aaaNewModel: false,
     aaaAuthLoginDefault: null,
+    defaultGateway: null, // switch management default-gateway
+    dhcpSnoopingEnabled: false,
+    dhcpSnoopingVlans: [], // vlan IDs with snooping active
+    domainLookup: true,
     savedToStartup: false
   };
 }
@@ -594,8 +609,24 @@ function runCommand(state, ctx, rawLine) {
       state.domainName = t[2]; return { output: [] };
     }
 
+    if (cmd0 === 'no' && t[1] && matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'domain-lookup', 7)) {
+      state.domainLookup = false; return { output: [] };
+    }
+
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'default-gateway', 8) && t[2]) {
+      state.defaultGateway = t[2]; return { output: [] };
+    }
+
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'dhcp', 3) && t[2] && matches(t[2], 'snooping', 4) && t[3] && matches(t[3], 'vlan', 3) && t[4]) {
+      t[4].split(',').forEach(v => { if (!state.dhcpSnoopingVlans.includes(v)) state.dhcpSnoopingVlans.push(v); });
+      return { output: [] };
+    }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'dhcp', 3) && t[2] && matches(t[2], 'snooping', 4) && !t[3]) {
+      state.dhcpSnoopingEnabled = true; return { output: [] };
+    }
+
     if (matches(cmd0, 'router', 3) && t[1] && matches(t[1], 'ospf', 2) && t[2]) {
-      state.ospf = state.ospf && state.ospf.processId === t[2] ? state.ospf : { processId: t[2], routerId: null, networks: [], redistribute: [] };
+      state.ospf = state.ospf && state.ospf.processId === t[2] ? state.ospf : { processId: t[2], routerId: null, networks: [], redistribute: [], passiveInterfaces: [] };
       ctx.mode = 'config-router'; ctx.routerProto = 'ospf';
       return { output: [] };
     }
@@ -838,6 +869,24 @@ function runCommand(state, ctx, rawLine) {
       iface.ipv6OspfProcess = t[2]; iface.ipv6OspfArea = t[4]; return { output: [] };
     }
 
+    // OSPFv2 per-interface: authentication and cost
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && matches(t[2], 'authentication-key', 8) && t[3]) {
+      iface.ospfAuthKey = t[3]; return { output: [] };
+    }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && matches(t[2], 'authentication', 8) && !t[3]) {
+      iface.ospfAuthEnabled = true; return { output: [] };
+    }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && matches(t[2], 'cost', 3) && t[3]) {
+      iface.ospfCost = parseInt(t[3], 10); return { output: [] };
+    }
+
+    // Voice VLAN
+    if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'voice', 4) && t[2] && matches(t[2], 'vlan', 3) && t[3]) {
+      iface.voiceVlan = t[3];
+      if (!state.vlans[t[3]]) state.vlans[t[3]] = { name: 'VLAN' + t[3].padStart(4, '0') };
+      return { output: [] };
+    }
+
     // EtherChannel
     if (matches(cmd0, 'channel-group', 8) && t[1] && t[2] && matches(t[2], 'mode', 3) && t[3]) {
       iface.channelGroup = t[1]; iface.channelMode = t[3].toLowerCase(); return { output: [] };
@@ -846,6 +895,15 @@ function runCommand(state, ctx, rawLine) {
     // GRE tunnel
     if (matches(cmd0, 'tunnel', 6) && t[1] && matches(t[1], 'source', 3) && t[2]) { iface.tunnelSource = t[2]; return { output: [] }; }
     if (matches(cmd0, 'tunnel', 6) && t[1] && matches(t[1], 'destination', 4) && t[2]) { iface.tunnelDestination = t[2]; return { output: [] }; }
+
+    // Speed / duplex
+    if (matches(cmd0, 'speed', 3) && t[1]) { iface.speed = t[1].toLowerCase(); return { output: [] }; }
+    if (matches(cmd0, 'duplex', 3) && t[1]) { iface.duplex = t[1].toLowerCase(); return { output: [] }; }
+
+    // DHCP snooping trust
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'dhcp', 3) && t[2] && matches(t[2], 'snooping', 4) && t[3] && matches(t[3], 'trust', 4)) {
+      iface.dhcpSnoopingTrust = true; return { output: [] };
+    }
 
     return illegal();
   }
@@ -878,6 +936,16 @@ function runCommand(state, ctx, rawLine) {
     if (ctx.routerProto === 'ospf' && matches(cmd0, 'redistribute', 6) && t[1]) {
       state.ospf.redistribute.push(t[1].toLowerCase()); return { output: [] };
     }
+    if (ctx.routerProto === 'ospf' && matches(cmd0, 'passive-interface', 9) && t[1]) {
+      const ifName = normalizeIfName(t.slice(1).join(''));
+      if (ifName && !state.ospf.passiveInterfaces.includes(ifName)) state.ospf.passiveInterfaces.push(ifName);
+      return { output: [] };
+    }
+    if (ctx.routerProto === 'ospf' && cmd0 === 'no' && t[1] && matches(t[1], 'passive-interface', 9) && t[2]) {
+      const ifName = normalizeIfName(t.slice(2).join(''));
+      state.ospf.passiveInterfaces = state.ospf.passiveInterfaces.filter(n => n !== ifName);
+      return { output: [] };
+    }
     if (ctx.routerProto === 'eigrp' && matches(cmd0, 'network', 3) && t[1]) {
       state.eigrp.networks.push({ network: t[1], wildcard: t[2] || null });
       return { output: [] };
@@ -909,6 +977,138 @@ function runCommand(state, ctx, rawLine) {
   function illegal() { return { output: ['% Invalid input detected at \'^\' marker.'], illegal: true }; }
 }
 
+function showInterfacesStatus(state) {
+  const out = ['Port                    Name                 Status       Vlan       Duplex  Speed Type'];
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    const desc = (i.description || '').slice(0, 20).padEnd(20);
+    let status;
+    if (i.shutdown) status = 'disabled';
+    else if (i.switchport.mode === 'trunk') status = 'connected';
+    else if (i.switchport.mode === 'access' && i.switchport.accessVlan) status = 'connected';
+    else if (i.ip) status = 'connected';
+    else status = 'notconnect';
+    const vlan = i.switchport.mode === 'trunk' ? 'trunk' : (i.switchport.accessVlan || (i.ip ? 'routed' : '1'));
+    const duplex = i.duplex || 'auto';
+    const speed = i.speed || 'auto';
+    out.push(name.padEnd(23) + desc + status.padEnd(13) + String(vlan).padEnd(11) + duplex.padEnd(8) + String(speed).padEnd(6) + 'unknown');
+  });
+  return out;
+}
+
+function showSpanningTree(state) {
+  const out = ['Spanning tree mode: ' + state.stpMode, ''];
+  Object.keys(state.stpRootVlans).forEach(vid => {
+    out.push('VLAN' + vid.padStart(4, '0') + '  Root role: ' + state.stpRootVlans[vid]);
+  });
+  out.push('');
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    if (i.portfast || i.bpduguard) {
+      out.push(name + ': PortFast=' + (i.portfast ? 'enabled' : 'disabled') + ', BPDU Guard=' + (i.bpduguard ? 'enabled' : 'disabled'));
+    }
+  });
+  return out;
+}
+
+function showEtherchannelSummary(state) {
+  const out = ['Flags: D - down  P - bundled in port-channel', 'Group  Port-channel  Protocol  Ports'];
+  const groups = {};
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    if (i.channelGroup) {
+      if (!groups[i.channelGroup]) groups[i.channelGroup] = [];
+      groups[i.channelGroup].push(name + '(' + (i.channelMode === 'active' ? 'LACP' : i.channelMode === 'passive' ? 'LACP' : 'static') + ')');
+    }
+  });
+  Object.keys(groups).forEach(g => {
+    out.push(g.padEnd(7) + ('Po' + g).padEnd(14) + (groups[g][0].includes('LACP') ? 'LACP' : 'PAgP/static').padEnd(12) + groups[g].join(' '));
+  });
+  if (Object.keys(groups).length === 0) out.push('(no channel groups configured)');
+  return out;
+}
+
+function showIpOspfInterfaceBrief(state) {
+  const out = ['Interface     PID   Area          IP Address/Mask    Cost  State  Passive'];
+  if (!state.ospf) { out.push('% OSPF is not running'); return out; }
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    if (!i.ip) return;
+    const match = state.ospf.networks.find(n => true); // networks listed generally; show all OSPF-enabled interfaces heuristically
+    const isPassive = state.ospf.passiveInterfaces.includes(name);
+    const cost = i.ospfCost || '(auto)';
+    out.push(name.padEnd(23) + String(state.ospf.processId).padEnd(6) + '0'.padEnd(14) + (i.ip + '/' + i.mask).padEnd(28) + String(cost).padEnd(6) + (i.shutdown ? 'DOWN'.padEnd(7) : 'UP'.padEnd(7)) + (isPassive ? 'Yes' : 'No'));
+  });
+  return out;
+}
+
+function showIpProtocols(state) {
+  const out = [];
+  if (state.ospf) {
+    out.push('Routing Protocol is "ospf ' + state.ospf.processId + '"');
+    out.push('  Router ID ' + (state.ospf.routerId || '(not set)'));
+    state.ospf.networks.forEach(n => out.push('  Network ' + n.network + ' ' + n.wildcard + ' Area ' + n.area));
+    if (state.ospf.passiveInterfaces.length) out.push('  Passive Interface(s): ' + state.ospf.passiveInterfaces.join(', '));
+    if (state.ospf.redistribute.length) out.push('  Redistributing: ' + state.ospf.redistribute.join(', '));
+  }
+  if (state.eigrp) {
+    out.push('Routing Protocol is "eigrp ' + state.eigrp.as + '"');
+    state.eigrp.networks.forEach(n => out.push('  Network ' + n.network + (n.wildcard ? ' ' + n.wildcard : '')));
+    out.push('  Automatic network summarization is ' + (state.eigrp.noAutoSummary ? 'not in effect' : 'in effect'));
+  }
+  if (!state.ospf && !state.eigrp) out.push('% No routing protocol is configured');
+  return out;
+}
+
+function showPortSecurity(state) {
+  const out = ['Port      Status       Max  CurAddr  Violation  Security Action'];
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    if (i.portSecurity && i.portSecurity.enabled) {
+      out.push(name.padEnd(23) + 'Secure-up'.padEnd(13) + String(i.portSecurity.maximum).padEnd(5) + (i.portSecurity.stickyMac ? '(sticky)'.padEnd(9) : '0'.padEnd(9)) + i.portSecurity.violation.padEnd(11) + i.portSecurity.violation);
+    }
+  });
+  if (out.length === 1) out.push('(port security not enabled on any interface)');
+  return out;
+}
+
+function showStandbyBrief(state) {
+  const out = ['Interface   Grp  Pri  P State    Active          Standby         Virtual IP'];
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    if (i.hsrp) {
+      out.push(name.padEnd(23) + String(i.hsrp.group).padEnd(5) + String(i.hsrp.priority).padEnd(5) + (i.hsrp.preempt ? 'Yes'.padEnd(10) : 'No'.padEnd(10)) + 'local'.padEnd(16) + 'unknown'.padEnd(16) + i.hsrp.ip);
+    }
+  });
+  if (out.length === 1) out.push('(no HSRP groups configured)');
+  return out;
+}
+
+function showIpNatStatistics(state) {
+  const out = [];
+  const insideIfs = Object.keys(state.interfaces).filter(n => state.interfaces[n].natSide === 'inside');
+  const outsideIfs = Object.keys(state.interfaces).filter(n => state.interfaces[n].natSide === 'outside');
+  out.push('Inside interfaces: ' + (insideIfs.join(', ') || '(none marked)'));
+  out.push('Outside interfaces: ' + (outsideIfs.join(', ') || '(none marked)'));
+  out.push('Static translations: ' + state.natStatic.length);
+  state.natStatic.forEach(n => out.push('  ' + n.local + ' -> ' + n.global));
+  if (state.natOverload) {
+    out.push('Dynamic (overload) source list: ' + state.natOverload.aclNumber + ' interface ' + (state.natOverload.exitInterface || '(none)') + (state.natOverload.overload ? ' overload' : ''));
+  } else {
+    out.push('Dynamic (overload) translation: not configured');
+  }
+  return out;
+}
+
+function showCdpInterface(state) {
+  const out = ['Global CDP state: ' + (state.cdpRun ? 'enabled' : 'disabled'), ''];
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    out.push(name + ' is ' + (i.shutdown ? 'administratively down' : 'up') + ', CDP is ' + (i.cdpEnabled === false ? 'disabled' : 'enabled'));
+  });
+  return out;
+}
+
 function dispatchShow(state, t) {
   if (!t[1]) return { output: ['% Incomplete command.'] };
   if (matches(t[1], 'running-config', 3)) return { output: synthRunningConfig(state) };
@@ -916,6 +1116,15 @@ function dispatchShow(state, t) {
   if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'route', 3)) return { output: showIpRoute(state) };
   if (matches(t[1], 'vlan', 3) && t[2] && matches(t[2], 'brief', 3)) return { output: showVlanBrief(state) };
   if (matches(t[1], 'interfaces', 4) && t[2] && matches(t[2], 'trunk', 3)) return { output: showInterfacesTrunk(state) };
+  if (matches(t[1], 'interfaces', 4) && t[2] && matches(t[2], 'status', 4)) return { output: showInterfacesStatus(state) };
+  if (matches(t[1], 'spanning-tree', 8)) return { output: showSpanningTree(state) };
+  if (matches(t[1], 'etherchannel', 6) && t[2] && matches(t[2], 'summary', 4)) return { output: showEtherchannelSummary(state) };
+  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'ospf', 2) && t[3] && matches(t[3], 'interface', 4) && t[4] && matches(t[4], 'brief', 3)) return { output: showIpOspfInterfaceBrief(state) };
+  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'protocols', 6)) return { output: showIpProtocols(state) };
+  if (matches(t[1], 'port-security', 6)) return { output: showPortSecurity(state) };
+  if (matches(t[1], 'standby', 5) && t[2] && matches(t[2], 'brief', 3)) return { output: showStandbyBrief(state) };
+  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'nat', 3) && t[3] && matches(t[3], 'statistics', 5)) return { output: showIpNatStatistics(state) };
+  if (matches(t[1], 'cdp', 3) && t[2] && matches(t[2], 'interface', 4)) return { output: showCdpInterface(state) };
   return { output: ['% Incomplete command or not supported in this lab simulator.'] };
 }
 
@@ -964,7 +1173,17 @@ const G = {
   natSideIs: (state, ifName, side) => { const i = G.iface(state, ifName); return !!i && i.natSide === side; },
   hasNatStatic: (state, local, glob) => state.natStatic.some(n => n.local === local && n.global === glob),
   hasNatOverload: (state, aclNumber) => !!state.natOverload && (!aclNumber || String(state.natOverload.aclNumber) === String(aclNumber)) && state.natOverload.overload,
-  aclHasRule: (state, num, action, substrIncludes) => { const a = state.acls[String(num)]; return !!a && a.some(r => r.action === action && (!substrIncludes || r.raw.toLowerCase().includes(substrIncludes.toLowerCase()))); },
+  aclHasRule: (state, num, action, substrIncludes) => {
+    const a = state.acls[String(num)];
+    if (!a) return false;
+    // Use a word-boundary match rather than plain substring — otherwise a rule for
+    // "eq 8080" would wrongly count as matching a check for "eq 80" (since "eq 80"
+    // is literally a substring of "eq 8080"). Escape regex metacharacters in the
+    // search text first since it may contain things like periods (e.g. an IP).
+    const escaped = String(substrIncludes || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = substrIncludes ? new RegExp('\\b' + escaped + '\\b', 'i') : null;
+    return a.some(r => r.action === action && (!re || re.test(r.raw)));
+  },
   aclExists: (state, num) => !!state.acls[String(num)] && state.acls[String(num)].length > 0,
   aclAppliedIn: (state, ifName, num) => { const i = G.iface(state, ifName); return !!i && String(i.aclIn) === String(num); },
   aclAppliedOut: (state, ifName, num) => { const i = G.iface(state, ifName); return !!i && String(i.aclOut) === String(num); },
@@ -990,7 +1209,23 @@ const G = {
   loggingHostSet: (state, ip) => state.loggingHosts.includes(ip),
   ntpServerSet: (state, ip) => state.ntpServers.includes(ip),
   aaaNewModelOn: (state) => state.aaaNewModel === true,
-  aaaAuthLoginUsesLocal: (state) => !!state.aaaAuthLoginDefault && state.aaaAuthLoginDefault.toLowerCase().includes('local')
+  aaaAuthLoginUsesLocal: (state) => !!state.aaaAuthLoginDefault && state.aaaAuthLoginDefault.toLowerCase().includes('local'),
+
+  // --- v3 accessors ---
+  speedIs: (state, ifName, speed) => { const i = G.iface(state, ifName); return !!i && i.speed === String(speed).toLowerCase(); },
+  duplexIs: (state, ifName, duplex) => { const i = G.iface(state, ifName); return !!i && i.duplex === duplex.toLowerCase(); },
+  defaultGatewayIs: (state, ip) => state.defaultGateway === ip,
+  domainLookupDisabled: (state) => state.domainLookup === false,
+  dhcpSnoopingEnabled: (state) => state.dhcpSnoopingEnabled === true,
+  dhcpSnoopingOnVlan: (state, vlanId) => state.dhcpSnoopingVlans.includes(String(vlanId)),
+  dhcpSnoopingTrusted: (state, ifName) => { const i = G.iface(state, ifName); return !!i && i.dhcpSnoopingTrust === true; },
+
+  // --- v4 accessors (OSPF passive/auth/cost, voice VLAN) ---
+  ospfPassiveOn: (state, ifName) => !!state.ospf && state.ospf.passiveInterfaces.includes(normalizeIfName(ifName) || ifName),
+  ospfNotPassiveOn: (state, ifName) => !!state.ospf && !state.ospf.passiveInterfaces.includes(normalizeIfName(ifName) || ifName),
+  ospfAuthConfigured: (state, ifName, key) => { const i = G.iface(state, ifName); return !!i && i.ospfAuthEnabled === true && (!key || i.ospfAuthKey === key); },
+  ospfCostIs: (state, ifName, cost) => { const i = G.iface(state, ifName); return !!i && i.ospfCost === cost; },
+  voiceVlanIs: (state, ifName, vlanId) => { const i = G.iface(state, ifName); return !!i && String(i.voiceVlan) === String(vlanId); }
 };
 
 // Export for Node testing; browser will just use the globals directly.
@@ -1016,6 +1251,16 @@ function routerState(hostname, ifNames) {
 function switchState(hostname, ifNames) {
   const s = freshState(hostname);
   ifNames.forEach(n => { s.interfaces[normalizeIfName(n)] = freshInterface('switch'); });
+  return s;
+}
+
+// Builds a "pre-broken" starting state for troubleshooting labs by actually
+// running real setup commands through the engine — so the buggy starting
+// config is itself provably reachable via real IOS commands, not hand-faked.
+function preconfigured(baseState, setupCommands) {
+  const s = baseState;
+  const c = newCtx();
+  setupCommands.forEach(cmd => runCommand(s, c, cmd));
   return s;
 }
 
@@ -1913,6 +2158,889 @@ LABS.push(
 }
 );
 
+// ============================================================
+// Labs 51-70 (v3 expansion) — 20 EASY labs targeting the topics
+// most likely to appear on the CCNA 200-301 exam. Each is short
+// (3-5 objectives), single-concept, quick repetition of core
+// fundamentals rather than big combined builds.
+// ============================================================
+
+LABS.push(
+{
+  id: 51, title: 'Hostname & Banner Quickstart', difficulty: 'Easy', domain: 'Network Fundamentals', est: 5,
+  scenario: 'The very first two things any new device should get: a real hostname instead of the factory default, and a legal warning banner before anyone else logs in.',
+  requirements: [
+    'Set the hostname to R1',
+    'Configure a MOTD banner containing the word "Unauthorized"'
+  ],
+  initial: () => routerState('Router', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Hostname is set to R1', check: s => G.hostnameIs(s, 'R1'), hint: 'hostname R1', why: "Every device on the exam (and in real life) should be identified by a meaningful hostname — it's the very first line of the prompt and shows up in every neighbor discovery and log entry from here on." },
+    { desc: 'Banner contains "Unauthorized"', check: s => G.bannerContains(s, 'unauthorized'), hint: 'banner motd #Unauthorized access is prohibited#', why: "A logon banner is a near-guaranteed exam topic under Security Fundamentals — it's the legal notice presented to anyone connecting, before they've even authenticated." }
+  ]
+},
+{
+  id: 52, title: 'Basic Interface Addressing', difficulty: 'Easy', domain: 'Network Fundamentals', est: 6,
+  scenario: 'The single most repeated skill on the exam: bring up one interface correctly, start to finish.',
+  requirements: [
+    'Configure GigabitEthernet0/0 with IP 10.1.1.1 255.255.255.0',
+    'Add a description "Primary LAN"',
+    'Bring the interface up'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Gi0/0 has IP 10.1.1.1 255.255.255.0', check: s => G.hasIp(s, 'GigabitEthernet0/0', '10.1.1.1', '255.255.255.0'), hint: 'interface gi0/0 / ip address 10.1.1.1 255.255.255.0', why: "Correct IP and mask is the single most tested, most fundamental skill on the whole exam — everything else (routing, ACLs, NAT) depends on getting this exactly right." },
+    { desc: 'Gi0/0 has a description', check: s => G.descriptionSet(s, 'GigabitEthernet0/0'), hint: 'description Primary LAN', why: "Cheap to configure, and exam scenarios frequently reference 'the interface described as...' to identify which link a question is actually asking about." },
+    { desc: 'Gi0/0 is up', check: s => G.isUp(s, 'GigabitEthernet0/0'), hint: 'no shutdown', why: "Router interfaces are shutdown by default — this is the single most common 'why isn't this working' gotcha on both the real exam and real hardware." }
+  ]
+},
+{
+  id: 53, title: 'Interface Speed & Duplex', difficulty: 'Easy', domain: 'Network Fundamentals', est: 6,
+  scenario: 'A legacy device on the other end of this link only supports 100 Mbps full duplex. Hard-code the local port to match rather than relying on auto-negotiation.',
+  requirements: [
+    'Set FastEthernet0/1 speed to 100',
+    'Set FastEthernet0/1 duplex to full'
+  ],
+  initial: () => switchState('SW1', ['FastEthernet0/1']),
+  objectives: [
+    { desc: 'Fa0/1 speed is 100', check: s => G.speedIs(s, 'fa0/1', 100), hint: 'interface fa0/1, then: speed 100', why: "A speed mismatch (one side auto, one side hard-set to a specific rate) is a classic real-world and exam troubleshooting scenario — matching both ends explicitly avoids the ambiguity that auto-negotiation can sometimes get wrong." },
+    { desc: 'Fa0/1 duplex is full', check: s => G.duplexIs(s, 'fa0/1', 'full'), hint: 'duplex full', why: "A duplex mismatch is one of the most frequently tested Layer 1 troubleshooting symptoms on the CCNA — it causes late collisions and degraded performance that's easy to misdiagnose as a cabling problem instead." }
+  ]
+},
+{
+  id: 54, title: 'Loopback for Testing', difficulty: 'Easy', domain: 'IP Connectivity', est: 5,
+  scenario: 'You need a stable, always-up test address on R1 that will never go down due to a bad cable.',
+  requirements: [
+    'Create Loopback0 with IP 9.9.9.9 255.255.255.255',
+    'Bring it up'
+  ],
+  initial: () => routerState('R1', []),
+  objectives: [
+    { desc: 'Loopback0 has IP 9.9.9.9/32', check: s => G.hasIp(s, 'Loopback0', '9.9.9.9', '255.255.255.255'), hint: 'interface loopback0 / ip address 9.9.9.9 255.255.255.255', why: "Loopback interfaces show up constantly on the exam — as a stable OSPF router-id source, a management address, or a simple always-reachable test target, since they have no physical hardware that can fail." },
+    { desc: 'Loopback0 is up', check: s => G.isUp(s, 'Loopback0'), hint: 'no shutdown', why: "Even a loopback interface still needs to be explicitly brought up — configuring the address alone doesn't guarantee the up/up state the exam will check for in a 'show ip interface brief' scenario." }
+  ]
+},
+{
+  id: 55, title: 'A Single Static Route', difficulty: 'Easy', domain: 'IP Connectivity', est: 6,
+  scenario: 'R1 needs to reach exactly one remote network: 172.16.5.0/24, reachable via 10.1.1.254.',
+  requirements: [
+    'Configure Gi0/0 with 10.1.1.1 255.255.255.0, up',
+    'Add a static route to 172.16.5.0 255.255.255.0 via 10.1.1.254'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Gi0/0 configured and up', check: s => G.hasIp(s, 'GigabitEthernet0/0', '10.1.1.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / ip address 10.1.1.1 255.255.255.0 / no shutdown', why: "The next-hop for the static route (10.1.1.254) has to actually be reachable through this interface — an unconfigured or down interface means the static route below would point nowhere real." },
+    { desc: 'Static route to 172.16.5.0/24 exists', check: s => G.hasRoute(s, '172.16.5.0', '255.255.255.0', '10.1.1.254'), hint: 'ip route 172.16.5.0 255.255.255.0 10.1.1.254', why: "This exact command pattern — network, mask, next-hop — is tested over and over throughout the exam. A router only knows what it's directly connected to or explicitly told; without this line, that remote network is completely unreachable." }
+  ]
+},
+{
+  id: 56, title: 'Default Route Only', difficulty: 'Easy', domain: 'IP Connectivity', est: 5,
+  scenario: 'R1 is a simple stub router with one uplink. Rather than a specific route for every possible destination, just point everything unknown toward the ISP.',
+  requirements: [
+    'Configure Gi0/1 with 203.0.113.1 255.255.255.252, up',
+    'Add a default route via 203.0.113.2'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/1']),
+  objectives: [
+    { desc: 'Gi0/1 configured and up', check: s => G.hasIp(s, 'GigabitEthernet0/1', '203.0.113.1', '255.255.255.252') && G.isUp(s, 'GigabitEthernet0/1'), hint: 'interface gi0/1 / ip address 203.0.113.1 255.255.255.252 / no shutdown', why: "This is R1's only path out — get the addressing or up/down state wrong here and the default route below has no working next-hop to actually use." },
+    { desc: 'Default route via 203.0.113.2', check: s => G.hasDefaultRoute(s, '203.0.113.2'), hint: 'ip route 0.0.0.0 0.0.0.0 203.0.113.2', why: "0.0.0.0 0.0.0.0 is the 'match anything' route — the exam tests this exact syntax repeatedly since it's the standard way a stub network reaches everything outside itself without needing a specific route for every destination." }
+  ]
+},
+{
+  id: 57, title: 'VLAN Creation Basics', difficulty: 'Easy', domain: 'Network Access', est: 5,
+  scenario: 'SW1 needs one new VLAN for the accounting department.',
+  requirements: [
+    'Create VLAN 30 named ACCOUNTING'
+  ],
+  initial: () => switchState('SW1', []),
+  objectives: [
+    { desc: 'VLAN 30 exists, named ACCOUNTING', check: s => G.vlanExists(s, 30, 'ACCOUNTING'), hint: 'vlan 30, then: name ACCOUNTING', why: "Creating the VLAN in the switch's database is the prerequisite step before any port can ever be assigned to it — this is tested constantly as the very first step of any VLAN-related exam scenario." }
+  ]
+},
+{
+  id: 58, title: 'Access Port Assignment', difficulty: 'Easy', domain: 'Network Access', est: 6,
+  scenario: 'A new employee\'s desk connects to Fa0/5 and needs to land on the existing VLAN 30 (Accounting).',
+  requirements: [
+    'Set Fa0/5 to access mode',
+    'Assign Fa0/5 to VLAN 30'
+  ],
+  initial: () => (() => { const s = switchState('SW1', ['FastEthernet0/5']); s.vlans['30'] = { name: 'ACCOUNTING' }; return s; })(),
+  objectives: [
+    { desc: 'Fa0/5 is in access mode', check: s => { const i = G.iface(s, 'fa0/5'); return !!i && i.switchport.mode === 'access'; }, hint: 'interface fa0/5, then: switchport mode access', why: "Explicitly setting access mode (rather than leaving it to dynamic negotiation) is standard best practice and exactly what the exam expects for a simple end-user port." },
+    { desc: 'Fa0/5 is assigned to VLAN 30', check: s => G.accessVlanIs(s, 'fa0/5', 30), hint: 'switchport access vlan 30', why: "A port left at the default VLAN (1) would put this new employee on the wrong network segment — this command is what actually places the port's traffic into VLAN 30." }
+  ]
+},
+{
+  id: 59, title: 'Basic Trunk Port', difficulty: 'Easy', domain: 'Network Access', est: 5,
+  scenario: 'SW1 and SW2 are connected via Gi0/2. It needs to carry every VLAN between the two switches.',
+  requirements: [
+    'Set Gi0/2 to trunk mode'
+  ],
+  initial: () => switchState('SW1', ['GigabitEthernet0/2']),
+  objectives: [
+    { desc: 'Gi0/2 is in trunk mode', check: s => G.isTrunk(s, 'gi0/2'), hint: 'interface gi0/2, then: switchport mode trunk', why: "This is the most basic form of the single most commonly tested Network Access concept: an access port carries one VLAN, a trunk carries many — and 'switchport mode trunk' is exactly how you turn one into the other." }
+  ]
+},
+{
+  id: 60, title: 'Switch Management IP & Default Gateway', difficulty: 'Easy', domain: 'Network Access', est: 8,
+  scenario: 'SW1 is a Layer 2-only switch that needs to be reachable for remote management from outside its local subnet.',
+  requirements: [
+    'Assign VLAN 1\'s SVI the IP 192.168.1.10 255.255.255.0, up',
+    'Set the switch\'s default gateway to 192.168.1.1'
+  ],
+  initial: () => switchState('SW1', []),
+  objectives: [
+    { desc: 'Vlan1 SVI has IP 192.168.1.10/24 and is up', check: s => G.hasIp(s, 'Vlan1', '192.168.1.10', '255.255.255.0') && G.isUp(s, 'Vlan1'), hint: 'interface vlan 1 / ip address 192.168.1.10 255.255.255.0 / no shutdown', why: "A Layer 2 switch still needs an IP address somewhere to be remotely managed (via SSH/Telnet/SNMP) — the management VLAN's SVI is the standard place for it." },
+    { desc: 'Default gateway is 192.168.1.1', check: s => G.defaultGatewayIs(s, '192.168.1.1'), hint: 'ip default-gateway 192.168.1.1', why: "A Layer 2-only switch has no IP routing table, so it can't use 'ip route' the way a router does — 'ip default-gateway' is the switch-specific equivalent that lets its own management traffic reach devices outside the local subnet. This exact distinction is a common exam trap." }
+  ]
+},
+{
+  id: 61, title: 'Disabling CDP Globally', difficulty: 'Easy', domain: 'Security Fundamentals', est: 4,
+  scenario: 'This lab device sits in a security-sensitive test environment where all neighbor discovery advertisements should be suppressed.',
+  requirements: [
+    'Disable CDP globally on the device'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'CDP is globally disabled', check: s => G.cdpGloballyDisabled(s), hint: 'no cdp run', why: "CDP broadcasts platform, IOS version, and IP address information in clear text to anything directly connected — the exam tests both this global command and the interface-level 'no cdp enable' variant, so knowing the difference between the two matters." }
+  ]
+},
+{
+  id: 62, title: 'Console Password Basics', difficulty: 'Easy', domain: 'Security Fundamentals', est: 5,
+  scenario: 'A brand-new device has no console protection at all. Anyone with physical access could plug in and get straight to the prompt.',
+  requirements: [
+    'Set a console password of Cisco@123',
+    'Require login at the console'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Console password is set', check: s => G.consolePasswordSet(s), hint: 'line console 0, then: password Cisco@123', why: "Console access is often assumed to be 'physically secure,' but an unlocked wiring closet or a device in transit is a real-world (and exam-tested) exposure that a simple password closes off." },
+    { desc: 'Console requires login', check: s => s.lines.console.login !== 'none', hint: 'login', why: "Setting a password alone doesn't force IOS to actually prompt for it — a very commonly tested gotcha is forgetting the separate 'login' command, which is what actually enforces the password you just set." }
+  ]
+},
+{
+  id: 63, title: 'VTY Password Basics', difficulty: 'Easy', domain: 'Security Fundamentals', est: 5,
+  scenario: 'Before layering on SSH and local accounts, learn the most basic form of remote access control: a shared line password on the VTY lines.',
+  requirements: [
+    'Set a VTY password of RemoteAccess1',
+    'Require login on the VTY lines'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'VTY password is set', check: s => !!s.lines.vty.password, hint: 'line vty 0 4, then: password RemoteAccess1', why: "This is the most basic (and most exam-tested) form of remote access protection — without any password at all, Telnet/SSH access to the VTY lines is completely open to anyone who can reach the device." },
+    { desc: 'VTY lines require login', check: s => s.lines.vty.login !== 'none', hint: 'login', why: "Just like on the console, the password alone does nothing without the separate 'login' command actually telling IOS to enforce it — this exact pairing shows up again and again across exam questions." }
+  ]
+}
+);
+LABS.push(
+{
+  id: 64, title: 'Standard ACL — Single Host', difficulty: 'Easy', domain: 'Security Fundamentals', est: 6,
+  scenario: 'Only one specific management workstation (10.1.1.50) should ever be allowed to reach this router remotely.',
+  requirements: [
+    'Create standard ACL 5 permitting only host 10.1.1.50',
+    'Apply ACL 5 to the VTY lines as an inbound access-class'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'ACL 5 permits host 10.1.1.50', check: s => G.aclHasRule(s, 5, 'permit', '10.1.1.50'), hint: 'access-list 5 permit host 10.1.1.50', why: "The 'host' keyword is shorthand for a /32 wildcard mask (0.0.0.0) — the exam tests this exact shorthand frequently since it's the cleanest way to match exactly one address instead of writing out the full wildcard by hand." },
+    { desc: 'ACL 5 applied as VTY access-class', check: s => G.vtyAccessClassIs(s, 5), hint: 'line vty 0 4, then: access-class 5 in', why: "An ACL that's written but never applied does nothing — this is the step that actually puts it in the VTY login path where it can restrict who's even allowed to attempt a connection." }
+  ]
+},
+{
+  id: 65, title: 'Wildcard Mask Subnet Permit', difficulty: 'Easy', domain: 'Security Fundamentals', est: 8,
+  scenario: 'Practice converting a subnet mask to its wildcard mask equivalent — permit the entire 192.168.4.0/28 subnet.',
+  requirements: [
+    'Create standard ACL 20 permitting the 192.168.4.0/28 subnet using the correct wildcard mask'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'ACL 20 permits 192.168.4.0 with wildcard 0.0.0.15', check: s => G.aclHasRule(s, 20, 'permit', '192.168.4.0 0.0.0.15'), hint: 'access-list 20 permit 192.168.4.0 0.0.0.15 — a /28 has 16 addresses, so the wildcard is 15 (16-1) in the last octet', why: "Wildcard masks are the inverse of a subnet mask (255.255.255.240 becomes 0.0.0.15), and converting between the two on the fly is one of the single most tested math skills on the whole exam — ACLs are where that skill actually gets used." }
+  ]
+},
+{
+  id: 66, title: 'DHCP Snooping Basics', difficulty: 'Easy', domain: 'Security Fundamentals', est: 8,
+  scenario: 'SW1 needs protection against a rogue DHCP server being plugged into an access port. The uplink to the real DHCP server should remain trusted.',
+  requirements: [
+    'Enable DHCP snooping globally',
+    'Enable DHCP snooping on VLAN 10',
+    'Mark the uplink Gi0/1 as a trusted port (where the legitimate DHCP server replies come from)'
+  ],
+  initial: () => switchState('SW1', ['GigabitEthernet0/1', 'FastEthernet0/1']),
+  objectives: [
+    { desc: 'DHCP snooping enabled globally', check: s => G.dhcpSnoopingEnabled(s), hint: 'ip dhcp snooping', why: "This is the master switch for the whole feature — without it, none of the per-VLAN or per-port trust settings that follow actually do anything." },
+    { desc: 'DHCP snooping active on VLAN 10', check: s => G.dhcpSnoopingOnVlan(s, 10), hint: 'ip dhcp snooping vlan 10', why: "Snooping only inspects DHCP traffic on VLANs it's explicitly told to watch — this is a commonly missed step that leaves a VLAN completely unprotected even with snooping 'enabled' globally." },
+    { desc: 'Gi0/1 marked as a trusted port', check: s => G.dhcpSnoopingTrusted(s, 'gi0/1'), hint: 'interface gi0/1, then: ip dhcp snooping trust', why: "By default, every port is untrusted once snooping is on — meaning even the legitimate DHCP server's replies would be blocked unless the uplink facing it is explicitly marked trusted. Every other (access/end-user-facing) port should stay untrusted, which is exactly what blocks a rogue DHCP server plugged in there." }
+  ]
+},
+{
+  id: 67, title: 'Port Security — Single MAC Limit', difficulty: 'Easy', domain: 'Security Fundamentals', est: 6,
+  scenario: 'Fa0/8 should only ever have one device connected to it — lock it down to the first MAC address it sees.',
+  requirements: [
+    'Enable port security on Fa0/8',
+    'Set the maximum to 1',
+    'Enable sticky MAC learning'
+  ],
+  initial: () => switchState('SW1', ['FastEthernet0/8']),
+  objectives: [
+    { desc: 'Port security enabled on Fa0/8', check: s => G.portSecurityEnabled(s, 'fa0/8'), hint: 'interface fa0/8, then: switchport port-security', why: "Port security has to be explicitly turned on before any of its other settings (maximum, sticky, violation mode) actually take effect — this exact command is the prerequisite the exam expects you to remember." },
+    { desc: 'Maximum is 1', check: s => G.portSecurityMax(s, 'fa0/8', 1), hint: 'switchport port-security maximum 1', why: "The maximum is what actually enforces the 'only one device' requirement — without lowering it from the default, port security is technically enabled but not restricting anything meaningful." },
+    { desc: 'Sticky MAC learning enabled', check: s => G.portSecurityStickyMac(s, 'fa0/8'), hint: 'switchport port-security mac-address sticky', why: "Sticky learning automatically captures and saves whatever MAC address connects first — the exam-favored alternative to manually typing in a specific MAC address by hand." }
+  ]
+},
+{
+  id: 68, title: 'HSRP — Virtual IP Only', difficulty: 'Easy', domain: 'IP Connectivity', est: 6,
+  scenario: 'R1 needs to participate in HSRP group 1, sharing a virtual gateway IP with a peer router — just the basic virtual IP for now.',
+  requirements: [
+    'On Gi0/0, configure HSRP group 1 with virtual IP 192.168.1.1'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'HSRP group 1 virtual IP is 192.168.1.1', check: s => G.hsrpIp(s, 'GigabitEthernet0/0', 1, '192.168.1.1'), hint: 'interface gi0/0, then: standby 1 ip 192.168.1.1', why: "This is the core of HSRP in one command: end hosts point their default gateway at this virtual IP instead of either physical router — so if one router fails, the other can take over the exact same address with zero client reconfiguration." }
+  ]
+},
+{
+  id: 69, title: 'OSPF — Single Network Statement', difficulty: 'Easy', domain: 'IP Connectivity', est: 8,
+  scenario: 'R1 has one directly connected network that needs to join OSPF process 1, Area 0.',
+  requirements: [
+    'Configure Gi0/0 with 192.168.1.1 255.255.255.0, up',
+    'Start OSPF process 1',
+    'Advertise 192.168.1.0/24 into Area 0'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'Gi0/0 configured and up', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0') && G.isUp(s, 'GigabitEthernet0/0'), hint: 'interface gi0/0 / ip address 192.168.1.1 255.255.255.0 / no shutdown', why: "OSPF can only advertise a network that's actually up and addressed correctly — this is the foundation the network statement below depends on." },
+    { desc: 'OSPF process 1 is running', check: s => G.ospfEnabled(s, 1), hint: 'router ospf 1', why: "Starting the process is the entry point for everything else — without it, there's no OSPF configuration mode for the network statement to attach to." },
+    { desc: '192.168.1.0/24 advertised into Area 0', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'network 192.168.1.0 0.0.0.255 area 0', why: "This is the single most tested OSPF command on the whole exam — the wildcard mask (not a subnet mask!) plus the area number is exactly what actually puts a network into OSPF's advertisements." }
+  ]
+},
+{
+  id: 70, title: 'NTP & Syslog Quickstart', difficulty: 'Easy', domain: 'IP Services', est: 5,
+  scenario: 'Before this device goes into production, point it at the standard time source and log collector used across the rest of the network.',
+  requirements: [
+    'Configure NTP server 192.5.41.41',
+    'Configure syslog host 10.0.0.100'
+  ],
+  initial: () => routerState('R1', ['GigabitEthernet0/0']),
+  objectives: [
+    { desc: 'NTP server 192.5.41.41 configured', check: s => G.ntpServerSet(s, '192.5.41.41'), hint: 'ntp server 192.5.41.41', why: "Without synchronized time, log timestamps across different devices won't line up — making it far harder to reconstruct what actually happened during an incident that touched multiple devices." },
+    { desc: 'Syslog host 10.0.0.100 configured', check: s => G.loggingHostSet(s, '10.0.0.100'), hint: 'logging host 10.0.0.100', why: "Local logs alone are lost on reload and limited in size — a centralized syslog server is what the exam expects as the standard practice for retaining a real audit trail." }
+  ]
+}
+);
+
+// ============================================================
+// Labs 71-74: TROUBLESHOOTING — styled after CCNA exam
+// "trouble ticket" scenarios. Unlike every lab before this,
+// these start from an ALREADY-CONFIGURED device with a hidden
+// bug (built by actually running the buggy commands through the
+// real engine, so it's provably reachable config, not faked).
+// You're diagnosing and fixing, not building from scratch.
+// ============================================================
+
+LABS.push(
+{
+  id: 71, title: 'Trouble Ticket: LAN Users Can\'t Get Out', difficulty: 'Medium', domain: 'Troubleshooting', est: 15, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "Some LAN devices can\'t even reach the router, and NOBODY on the LAN can reach the internet." R1 was configured recently — something in that work is wrong. Diagnose and fix it; don\'t just reconfigure everything from scratch.',
+  requirements: [
+    'Find and correct the subnet mask problem on the LAN interface (Gi0/0) — it should cover the full 192.168.1.0/24 range',
+    'Find and add the missing default route so LAN traffic can reach the internet via 203.0.113.2'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']), [
+    'enable', 'configure terminal', 'hostname R1',
+    'interface gi0/0', 'ip address 192.168.1.1 255.255.255.128', 'description LAN', 'no shutdown', 'exit',
+    'interface gi0/1', 'ip address 203.0.113.1 255.255.255.252', 'description WAN', 'no shutdown', 'exit',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Gi0/0 has the correct mask (255.255.255.0)', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.1.1', '255.255.255.0'), hint: 'interface gi0/0, then: ip address 192.168.1.1 255.255.255.0', why: "The previous engineer configured a /25 (255.255.255.128) instead of a /24 — that mask only covers addresses .1 through .126, cutting the subnet in half. Any device configured in the .128-.254 range would see the router as being on a completely different network and simply couldn't reach it — exactly matching the reported symptom of 'some' devices being unable to reach the router at all." },
+    { desc: 'Gi0/0 is still up', check: s => G.isUp(s, 'GigabitEthernet0/0'), hint: 'no shutdown (should already be set — just don\'t undo it while fixing the mask)', why: "It's easy to accidentally leave an interface down while troubleshooting something else on it — always re-verify the basics (up/down state) after making any other fix, since the exam frequently checks whether a 'fix' introduced a new problem." },
+    { desc: 'A default route via 203.0.113.2 now exists', check: s => G.hasDefaultRoute(s, '203.0.113.2'), hint: 'ip route 0.0.0.0 0.0.0.0 203.0.113.2', why: "The WAN interface itself was configured correctly, but no default route was ever added — so R1 has a working path to the ISP but no instruction to actually USE it for anything outside its own directly connected networks. This is a very common real-world 'everything looks configured but nothing routes' gotcha." }
+  ]
+},
+{
+  id: 72, title: 'Trouble Ticket: New VLAN Has No Connectivity', difficulty: 'Medium', domain: 'Troubleshooting', est: 15, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "We just moved a new IT department workstation onto Fa0/5 and gave it a VLAN 20 address, but it can\'t reach anything — not even other IT devices upstream through the trunk to SW2 on Gi0/1." Someone set this port up recently and got something wrong. Find it.',
+  requirements: [
+    'Correct Fa0/5\'s VLAN assignment — it should be in VLAN 20 (IT), not wherever it currently is',
+    'Fix the trunk on Gi0/1 so it carries VLAN 20 — without breaking VLAN 10, which other users still depend on'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['FastEthernet0/5', 'GigabitEthernet0/1']), [
+    'enable', 'configure terminal',
+    'vlan 10', 'name SALES', 'exit',
+    'vlan 20', 'name IT', 'exit',
+    'interface fa0/5', 'switchport mode access', 'switchport access vlan 10', 'exit',
+    'interface gi0/1', 'switchport mode trunk', 'switchport trunk allowed vlan 10', 'exit',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Fa0/5 is now an access port in VLAN 20', check: s => G.accessVlanIs(s, 'fa0/5', 20), hint: 'interface fa0/5, then: switchport access vlan 20', why: "Whoever set up this port assigned it to VLAN 10 (SALES) instead of VLAN 20 (IT) — a simple typo-level mistake, but it means the new IT workstation is sitting in the wrong broadcast domain entirely, unable to reach anything actually on its intended subnet." },
+    { desc: 'Gi0/1 trunk still allows VLAN 10 (not broken in the process)', check: s => G.trunkAllows(s, 'gi0/1', 10), hint: 'Use "switchport trunk allowed vlan add 20" rather than retyping the whole list — that adds VLAN 20 without wiping out what\'s already allowed', why: "This is the exact trap the exam loves: if you fix the missing VLAN 20 by typing \"switchport trunk allowed vlan 20\" (without 'add'), that OVERWRITES the entire allowed list — instantly cutting off VLAN 10 for every other user relying on that same trunk, trading one outage for another." },
+    { desc: 'Gi0/1 trunk now also allows VLAN 20', check: s => G.trunkAllows(s, 'gi0/1', 20), hint: 'interface gi0/1, then: switchport trunk allowed vlan add 20', why: "The trunk was never told to carry VLAN 20 at all — even with the access port now correctly assigned, VLAN 20's traffic would still hit a dead end at Gi0/1 since the trunk itself would silently drop anything not in its allowed list." }
+  ]
+},
+{
+  id: 73, title: 'Trouble Ticket: Admin Locked Out of SSH', difficulty: 'Medium', domain: 'Troubleshooting', est: 15, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "The ops team (10.10.10.0/24) can no longer SSH into R1 — connections just time out, like the device isn\'t even listening." Everyone insists nothing changed except "a small ACL cleanup" earlier today. Find what broke.',
+  requirements: [
+    'Find and fix the ACL so the ops subnet (10.10.10.0/24) is actually permitted',
+    'Do NOT simply remove the access-class or loosen VTY security to "make the error go away" — the restriction itself is correct, only the subnet it references is wrong'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0']), [
+    'enable', 'configure terminal',
+    'access-list 10 permit 10.10.100.0 0.0.0.255',
+    'line vty 0 4', 'access-class 10 in', 'login local', 'transport input ssh', 'exit',
+    'username admin privilege 15 secret AdminPass1',
+    'enable secret Cisco123!',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'ACL 10 now permits the correct subnet, 10.10.10.0/24', check: s => G.aclHasRule(s, 10, 'permit', '10.10.10.0 0.0.0.255'), hint: 'access-list 10 permit 10.10.10.0 0.0.0.255 — you don\'t need to remove the old bad line, just add the correct one', why: "The ACL was written for 10.10.100.0 — a one-digit typo away from the real ops subnet, 10.10.10.0. Since that's the ONLY permit line, and standard ACLs deny everything not explicitly matched, every single connection attempt from the real ops subnet has been silently dropped by the implicit deny at the end of the ACL, with no error message pointing to why." },
+    { desc: 'ACL 10 is still applied to VTY as an inbound access-class', check: s => G.vtyAccessClassIs(s, 10), hint: 'Should already be set — just confirm you didn\'t remove it while investigating', why: "A tempting but wrong 'fix' under pressure is to just rip out the access-class entirely to restore access immediately. That does restore SSH — but it also removes the security boundary for everyone else, turning a scoped bug into an open door. The right fix touches the ACL's content, not whether it's applied." },
+    { desc: 'VTY still requires local login and SSH only', check: s => G.vtyLoginLocal(s) && G.vtyTransportIs(s, ['ssh']), hint: 'Should already be set — just confirm login local and transport input ssh are both still in place', why: "Same principle — under pressure to restore access fast, it's tempting to loosen transport to \"telnet ssh\" or drop \"login local\" as a workaround. Neither was actually broken; touching them wouldn't fix the real issue (the ACL) and would just reintroduce cleartext Telnet or shared-password login as new problems." }
+  ]
+},
+{
+  id: 74, title: 'Trouble Ticket: OSPF Subnet Missing Everywhere', difficulty: 'Hard', domain: 'Troubleshooting', est: 18, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "192.168.1.0/24 shows up fine on every router\'s OSPF routing table, but 192.168.2.0/24 never shows up anywhere except on R1 itself." Both networks are directly connected to R1 and OSPF is running. Find why only one of them is actually being advertised correctly.',
+  requirements: [
+    'Correct the OSPF network statement for 192.168.2.0/24 — it\'s using the wrong wildcard mask',
+    'Confirm the 192.168.1.0/24 statement and the OSPF process itself are untouched and still correct'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit',
+    'interface gi0/1', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit',
+    'router ospf 1', 'router-id 4.4.4.4',
+    'network 192.168.1.0 0.0.0.255 area 0',
+    'network 192.168.2.0 0.0.0.0 area 0',
+    'end'
+  ]),
+  objectives: [
+    { desc: '192.168.2.0/24 now advertised with the correct wildcard (0.0.0.255) into Area 0', check: s => G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0), hint: 'router ospf 1, then: network 192.168.2.0 0.0.0.255 area 0', why: "The existing statement uses wildcard 0.0.0.0 — which in OSPF's network-statement matching means 'match this exact host address only,' not 'match this /24 subnet.' Since Gi0/1's actual address is 192.168.2.1 (not 192.168.2.0), that interface never actually matched the statement at all, so OSPF silently never enabled itself on that interface or advertised the network — despite the line appearing to be 'there' in the config." },
+    { desc: '192.168.1.0/24 is still correctly advertised (unaffected)', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'Should already be correct — just confirm you didn\'t change it while fixing the other line', why: "This is the control in the ticket — it already works, which is exactly why comparing the two lines side by side (correct wildcard vs. wrong wildcard) is what should point you at the actual bug instead of guessing at unrelated causes." },
+    { desc: 'OSPF process 1 still running with router-id 4.4.4.4', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '4.4.4.4'), hint: 'Should already be set — just confirm the process and router-id are unchanged', why: "The process itself was never the problem — it's specifically one network statement's wildcard mask. Verifying the process and router-id are untouched confirms the fix was precise, not a wider rebuild that could introduce new issues elsewhere." }
+  ]
+}
+);
+
+// ============================================================
+// Labs 75-80: TROUBLESHOOTING, round 2. Same format as 71-74 —
+// pre-configured device with a hidden bug, built by actually
+// running the buggy commands through the real engine.
+// ============================================================
+
+LABS.push(
+{
+  id: 75, title: 'Trouble Ticket: No Internet Access After NAT Setup', difficulty: 'Medium', domain: 'Troubleshooting', est: 15, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "We configured NAT on R1 yesterday for the new office, but nobody on the LAN can reach the internet — not even a single connection is getting translated." The engineer who set it up swears everything is there.',
+  requirements: [
+    'Find the missing piece of the inside/outside NAT configuration and fix it',
+    'Don\'t touch the ACL or the overload command — they were configured correctly'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'ip nat inside', 'exit',
+    'interface gi0/1', 'ip address 203.0.113.1 255.255.255.252', 'no shutdown', 'exit',
+    'access-list 1 permit 192.168.1.0 0.0.0.255',
+    'ip nat inside source list 1 interface gi0/1 overload',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Gi0/1 (WAN) is now marked NAT outside', check: s => G.natSideIs(s, 'GigabitEthernet0/1', 'outside'), hint: 'interface gi0/1, then: ip nat outside', why: "NAT needs BOTH sides explicitly marked before it will translate anything — 'ip nat inside' was set on Gi0/0, but Gi0/1 was never told it's the outside interface. Without that second marking, the router has no idea which direction traffic needs to be translated, so nothing gets translated at all, even though the ACL and overload command are both perfectly correct." },
+    { desc: 'Gi0/0 (LAN) is still marked NAT inside', check: s => G.natSideIs(s, 'GigabitEthernet0/0', 'inside'), hint: 'Should already be set — just confirm it while fixing the other side', why: "This half was actually done correctly — comparing what's present (inside) against what's missing (outside) is exactly the kind of side-by-side check that should point you at the real gap instead of re-doing work that was already fine." },
+    { desc: 'NAT overload configuration is untouched and still correct', check: s => G.hasNatOverload(s, 1), hint: 'Should already be set — no need to retype it', why: "The overload command and the ACL it references were both already correct — the bug was specifically the missing 'ip nat outside' marking, not the translation rule itself. Retyping things that already work risks introducing a new typo where there wasn't a problem before." }
+  ]
+},
+{
+  id: 76, title: 'Trouble Ticket: Desk Port Keeps Shutting Down', difficulty: 'Medium', domain: 'Troubleshooting', est: 12, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "Fa0/2 has a Cisco IP phone with a PC plugged into the back of it — exactly the same setup as every other desk in the building — but this one port keeps going err-disabled throughout the day, while the identical setups everywhere else are fine."',
+  requirements: [
+    'Figure out why this port (and not the identical setups elsewhere) keeps tripping port security, and fix it',
+    'Don\'t disable port security entirely — the security requirement is legitimate, the current setting is just wrong for a phone+PC port'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['FastEthernet0/2']), [
+    'enable', 'configure terminal',
+    'interface fa0/2', 'switchport mode access', 'switchport access vlan 10',
+    'switchport port-security', 'switchport port-security maximum 1',
+    'switchport port-security mac-address sticky', 'switchport port-security violation shutdown',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Maximum MAC addresses raised to 2', check: s => G.portSecurityMax(s, 'fa0/2', 2), hint: 'interface fa0/2, then: switchport port-security maximum 2', why: "A phone with a PC daisy-chained behind it means TWO MAC addresses will legitimately appear on this one port — the phone's own address, and the PC's. A maximum of 1 (fine for a plain desk with no phone) treats the second, completely legitimate device as a security violation and shuts the port down." },
+    { desc: 'Sticky MAC learning is still enabled', check: s => G.portSecurityStickyMac(s, 'fa0/2'), hint: 'Should already be set — just confirm it while raising the maximum', why: "Sticky learning wasn't the problem here — the limit was. Leaving sticky learning in place means the switch will still automatically learn and lock in whichever two MAC addresses show up first, without needing them typed in by hand." },
+    { desc: 'Violation mode is still shutdown', check: s => G.portSecurityViolation(s, 'fa0/2', 'shutdown'), hint: 'Should already be set — the fix is the maximum, not the violation action', why: "The violation mode itself was correctly configured — a genuinely unauthorized third device should still cause the port to shut down. The bug was specifically that the limit didn't account for the phone+PC combination this particular desk actually has." }
+  ]
+},
+{
+  id: 77, title: 'Trouble Ticket: Backup Router Won\'t Give Up Active Status', difficulty: 'Medium', domain: 'Troubleshooting', est: 15, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "R1 is supposed to be the primary HSRP gateway — R2 is only the backup. But after R1 had a brief reboot this morning, R2 stayed active even after R1 came back up and has been active ever since."',
+  requirements: [
+    'Fix R1\'s HSRP priority so it\'s clearly favored over the backup',
+    'Fix whatever is preventing R1 from reclaiming active status once it\'s back online'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 192.168.1.2 255.255.255.0', 'no shutdown',
+    'standby 1 ip 192.168.1.1',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'HSRP priority raised to 200', check: s => G.hsrpPriority(s, 'GigabitEthernet0/0', 1, 200), hint: 'interface gi0/0, then: standby 1 priority 200', why: "Priority was never explicitly set, leaving it at the default of 100 — the same default R2 likely also has, or possibly even lower than whatever R2 was configured with. Without a clearly higher priority, there's no guarantee R1 wins the active election at all, let alone reliably." },
+    { desc: 'Preempt is now enabled', check: s => G.hsrpPreempt(s, 'GigabitEthernet0/0'), hint: 'standby 1 preempt', why: "This is the actual root cause of the reported symptom. Without preempt, even a router with a perfectly high priority will NOT automatically reclaim the active role after coming back from an outage — HSRP only re-evaluates priority in preempt-enabled routers. R2 became active during R1's brief reboot and, without preempt on R1, simply had no reason to ever hand it back." },
+    { desc: 'Virtual IP is still 192.168.1.1', check: s => G.hsrpIp(s, 'GigabitEthernet0/0', 1, '192.168.1.1'), hint: 'Should already be set — just confirm it while fixing priority and preempt', why: "The virtual IP itself was configured correctly and is what every client actually points to as its gateway — the bug was entirely about which physical router wins and keeps the active role, not about the address itself." }
+  ]
+},
+{
+  id: 78, title: 'Trouble Ticket: DHCP Server Ran Out of Addresses', difficulty: 'Medium', domain: 'Troubleshooting', est: 12, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "About 40 devices live on the 192.168.1.0/24 office LAN. Starting this morning, new devices get \'no DHCP offers received\' — like the pool is full. Nothing changed except some DHCP \'cleanup\' work yesterday afternoon."',
+  requirements: [
+    'Find and correct the DHCP pool\'s network statement — the subnet mask was changed to something far too small during yesterday\'s "cleanup"'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0']), [
+    'enable', 'configure terminal',
+    'ip dhcp excluded-address 192.168.1.1 192.168.1.10',
+    'ip dhcp pool OFFICE_POOL', 'network 192.168.1.0 255.255.255.240', 'default-router 192.168.1.1', 'dns-server 8.8.8.8',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Pool network corrected to 192.168.1.0/24 (255.255.255.0)', check: s => G.dhcpPoolNetwork(s, 'OFFICE_POOL', '192.168.1.0', '255.255.255.0'), hint: 'ip dhcp pool OFFICE_POOL, then: network 192.168.1.0 255.255.255.0', why: "Yesterday's 'cleanup' accidentally set the pool to a /28 (255.255.255.240) — only 16 total addresses, and after the excluded range at the start, barely any usable leases remain. With roughly 40 real devices needing addresses, the pool ran out almost immediately. This is exactly why 'DHCP suddenly stopped working with no config changes reported' tickets are worth checking the actual pool size on first." },
+    { desc: 'Default router is still 192.168.1.1', check: s => G.dhcpPoolDefaultRouter(s, 'OFFICE_POOL', '192.168.1.1'), hint: 'Should already be set — just confirm it while fixing the network line', why: "The gateway setting itself was never the problem — only the pool's address range was. Confirming it's untouched after the fix rules out an unrelated second issue." },
+    { desc: 'DNS server is still 8.8.8.8', check: s => G.dhcpPoolDnsServer(s, 'OFFICE_POOL', '8.8.8.8'), hint: 'Should already be set', why: "Same idea — DNS was correctly configured and wasn't part of the bug; confirming it stayed correct is part of verifying you made a precise, targeted fix rather than blindly retyping the whole pool." }
+  ]
+},
+{
+  id: 79, title: 'Trouble Ticket: Web Server Unreachable After ACL Change', difficulty: 'Medium', domain: 'Troubleshooting', est: 12, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "An ACL was added on R1 this week to restrict inbound traffic on the server-facing interface. Since then, nobody outside the building can reach the web server on standard HTTP — even though the server team confirms the ACL was supposed to allow exactly that."',
+  requirements: [
+    'Find the port number typo in the ACL and add a correct rule for standard HTTP',
+    'Leave the existing deny statement and the ACL\'s application on the interface alone — both are correct'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/1']), [
+    'enable', 'configure terminal',
+    'access-list 101 permit tcp any any eq 8080',
+    'access-list 101 deny ip any any',
+    'interface gi0/1', 'ip access-group 101 in',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'ACL 101 now has a permit rule for standard HTTP (eq 80)', check: s => G.aclHasRule(s, 101, 'permit', 'eq 80'), hint: 'access-list 101 permit tcp any any eq 80 — you don\'t need to remove the old line, just add the correct one', why: "The existing rule permits TCP port 8080, not port 80 — standard HTTP traffic uses port 80 by default, so every normal web browser connection attempt never matches the permit line and falls straight through to the deny statement at the end. Port 8080 is a real, commonly used alternate HTTP port, which is exactly what makes this typo easy to miss at a glance." },
+    { desc: 'ACL 101 still has its explicit deny statement', check: s => G.aclHasRule(s, 101, 'deny'), hint: 'Should already be present — just confirm it', why: "The deny statement itself is correct and intentional — the fix is adding the missing permit for port 80, not touching how the ACL handles everything else." },
+    { desc: 'ACL 101 is still applied inbound on Gi0/1', check: s => G.aclAppliedIn(s, 'GigabitEthernet0/1', 101), hint: 'Should already be applied — just confirm you didn\'t remove it', why: "Removing the ACL entirely would also 'fix' the symptom, but it would remove all the filtering intended for that interface, not just the specific typo causing this problem — the correct fix is precise, not a blanket removal of the security control." }
+  ]
+},
+{
+  id: 80, title: 'Trouble Ticket: EtherChannel Won\'t Bundle', difficulty: 'Easy', domain: 'Troubleshooting', est: 8, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "Fa0/1 and Fa0/2 were supposed to bundle into a single EtherChannel to the core switch, but they\'re still showing up as two separate, independent links instead of one logical Port-channel."',
+  requirements: [
+    'Find the mismatch preventing these two ports from bundling together, and fix it'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['FastEthernet0/1', 'FastEthernet0/2']), [
+    'enable', 'configure terminal',
+    'interface fa0/1', 'channel-group 1 mode active', 'exit',
+    'interface fa0/2', 'channel-group 2 mode active', 'exit',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Fa0/2 is now in channel-group 1 (matching Fa0/1)', check: s => G.channelGroupIs(s, 'fa0/2', 1, 'active'), hint: 'interface fa0/2, then: channel-group 1 mode active', why: "Fa0/1 was placed in channel-group 1, but Fa0/2 was placed in channel-group 2 — a simple typo, but it means the switch treats them as members of two entirely different (and each incomplete) EtherChannel bundles instead of one combined link. Every member port intended for the same bundle has to reference the exact same channel-group number." },
+    { desc: 'Fa0/1 is still in channel-group 1, mode active', check: s => G.channelGroupIs(s, 'fa0/1', 1, 'active'), hint: 'Should already be set — just confirm it while fixing Fa0/2', why: "Fa0/1's configuration was correct from the start — the fix only needed to bring Fa0/2 into agreement with it, not change both sides." }
+  ]
+}
+);
+
+// ============================================================
+// Labs 81-85: OSPF TROUBLESHOOTING. Same "pre-broken device"
+// format as 71-80, focused entirely on OSPF-specific failure
+// modes distinct from the wildcard-mask bug already used in
+// Lab 74 — passive interfaces, missing statements, area
+// mismatches, authentication, and cost manipulation.
+// ============================================================
+
+LABS.push(
+{
+  id: 81, title: 'Trouble Ticket: OSPF Neighbor Never Forms', difficulty: 'Medium', domain: 'Troubleshooting', est: 15, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "R1\'s Gi0/0 is supposed to be forming an OSPF neighbor relationship with the distribution switch, but \'show ip ospf neighbor\' comes back completely empty on that link. Gi0/1 (a different interface) neighbors just fine." Someone was cleaning up unnecessary OSPF Hello traffic on end-user-facing ports recently.',
+  requirements: [
+    'Find which interface was incorrectly marked passive, and remove that setting from Gi0/0',
+    'Leave OSPF\'s other passive interfaces (if any) and the rest of the configuration alone — Gi0/1 works correctly and should stay that way'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit',
+    'interface gi0/1', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit',
+    'router ospf 1', 'router-id 1.1.1.1',
+    'network 192.168.1.0 0.0.0.255 area 0', 'network 192.168.2.0 0.0.0.255 area 0',
+    'passive-interface gi0/0',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Gi0/0 is no longer a passive OSPF interface', check: s => G.ospfNotPassiveOn(s, 'GigabitEthernet0/0'), hint: 'router ospf 1, then: no passive-interface gi0/0', why: "A passive interface still gets its network advertised, but OSPF completely stops sending and listening for Hello packets on it — which means it can NEVER form a neighbor relationship on that link, no matter how correct everything else is. Passive interface is meant for end-host-facing links with no other routers on them, and someone applied it to the wrong interface here." },
+    { desc: 'Gi0/1 remains correctly configured and NOT passive', check: s => G.ospfNotPassiveOn(s, 'GigabitEthernet0/1') && G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0), hint: 'Should already be correct — just confirm it while fixing Gi0/0', why: "Gi0/1 was never the problem — it's the working control that shows the rest of the OSPF configuration (process, router-id, network statements) is fine, which is exactly what should point you toward passive-interface specifically as the cause on Gi0/0." },
+    { desc: 'OSPF process 1 and router-id 1.1.1.1 remain intact', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1'), hint: 'Should already be set — no need to touch these', why: "The fix here is removing one specific passive-interface line, not rebuilding the OSPF process — confirming the process and router-id are untouched verifies the fix was precise." }
+  ]
+},
+{
+  id: 82, title: 'Trouble Ticket: New Subnet Missing From OSPF', difficulty: 'Easy', domain: 'Troubleshooting', est: 10, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "A new server subnet (192.168.30.0/24) was added to R1 last week. The interface is up and servers can reach each other locally, but nobody on any other router can reach that subnet — it\'s completely absent from every other router\'s OSPF routes."',
+  requirements: [
+    'Find the missing OSPF network statement for the new subnet and add it to Area 0'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/2']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit',
+    'interface gi0/2', 'ip address 192.168.30.1 255.255.255.0', 'description Server Subnet', 'no shutdown', 'exit',
+    'router ospf 1', 'router-id 2.2.2.2',
+    'network 192.168.1.0 0.0.0.255 area 0',
+    'end'
+  ]),
+  objectives: [
+    { desc: '192.168.30.0/24 is now advertised into Area 0', check: s => G.ospfAdvertises(s, '192.168.30.0', '0.0.0.255', 0), hint: 'router ospf 1, then: network 192.168.30.0 0.0.0.255 area 0', why: "The interface was correctly addressed and brought up, but nobody ever added the matching OSPF network statement — configuring an interface's IP address does NOT automatically advertise it. This is one of the single most common real-world 'it's configured but nobody else can see it' OSPF mistakes." },
+    { desc: '192.168.1.0/24 is still correctly advertised (unaffected)', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'Should already be correct — just confirm it', why: "This existing, working statement is the reference pattern — matching its exact syntax (wildcard mask, then area) for the new subnet is exactly what the fix requires." }
+  ]
+},
+{
+  id: 83, title: 'Trouble Ticket: Subnet Unreachable From the Backbone', difficulty: 'Medium', domain: 'Troubleshooting', est: 15, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "This is a single-area OSPF network — everything is supposed to be in Area 0. But 192.168.2.0/24 is only reachable from R1 itself; every other router treats it as unreachable, as if it\'s in some area they don\'t recognize."',
+  requirements: [
+    'Find the network statement using the wrong area number and correct it to Area 0, matching the rest of the single-area design'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit',
+    'interface gi0/1', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit',
+    'router ospf 1', 'router-id 3.3.3.3',
+    'network 192.168.1.0 0.0.0.255 area 0',
+    'network 192.168.2.0 0.0.0.255 area 1',
+    'end'
+  ]),
+  objectives: [
+    { desc: '192.168.2.0/24 now advertised into Area 0 (matching the single-area design)', check: s => G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0), hint: 'router ospf 1, then: network 192.168.2.0 0.0.0.255 area 0', why: "This network was placed in Area 1 — but nothing else in this network is designed to support multiple areas (there's no Area 0 backbone connection configured for Area 1 to connect through). Every OSPF area other than the backbone (Area 0) must have a path back to Area 0 to be reachable from anywhere else; putting a subnet in an isolated Area 1 with no such connection effectively strands it." },
+    { desc: '192.168.1.0/24 remains correctly advertised into Area 0', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'Should already be correct — just confirm it while fixing the other line', why: "This working line is the pattern to match — both networks in a genuinely single-area design should reference the exact same area number." },
+    { desc: 'OSPF process 1, router-id 3.3.3.3 remain unchanged', check: s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '3.3.3.3'), hint: 'Should already be set', why: "The bug was specifically the area number on one network statement — the process and router-id were never part of the problem." }
+  ]
+},
+{
+  id: 84, title: 'Trouble Ticket: OSPF Adjacency Dropped After Security Hardening', difficulty: 'Hard', domain: 'Troubleshooting', est: 18, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "As part of this week\'s security hardening pass, OSPF authentication was enabled on R1\'s backbone link. Since then, the neighbor relationship on that link has been down. Security says the standard key for this network is CorpOspfKey1 — someone may have mistyped it."',
+  requirements: [
+    'Correct the OSPF authentication key on Gi0/0 to CorpOspfKey1',
+    'Leave authentication itself enabled — the requirement to use it is correct, only the key was wrong'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown',
+    'ip ospf authentication', 'ip ospf authentication-key CorpOspfKey11',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'OSPF authentication key on Gi0/0 is now CorpOspfKey1', check: s => G.ospfAuthConfigured(s, 'GigabitEthernet0/0', 'CorpOspfKey1'), hint: 'interface gi0/0, then: ip ospf authentication-key CorpOspfKey1', why: "The configured key is 'CorpOspfKey11' — one extra character off from the network standard 'CorpOspfKey1'. OSPF authentication requires the key to match EXACTLY between neighbors; even a single-character mismatch causes every Hello packet to be rejected as unauthenticated, which looks identical to the link being completely down from a neighbor-forming perspective." },
+    { desc: 'Authentication remains enabled on Gi0/0', check: s => { const i = G.iface(s, 'GigabitEthernet0/0'); return !!i && i.ospfAuthEnabled === true; }, hint: 'Should already be enabled — the fix is the key value, not whether authentication is on', why: "Security hardening correctly required authentication here — the mistake was purely in the key value that got typed, not in the decision to require authentication at all. Disabling authentication to 'fix' this would undo a legitimate security requirement instead of just fixing the typo." }
+  ]
+},
+{
+  id: 85, title: 'Trouble Ticket: Traffic Taking the Slow Path', difficulty: 'Medium', domain: 'Troubleshooting', est: 15, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "R1 has two paths toward the data center: a fast Gigabit link (Gi0/0) and a slow backup serial link (Serial0/0/0). OSPF is somehow preferring the slow serial link for all data center traffic, even though the Gigabit link is up and should clearly be the better path."',
+  requirements: [
+    'Find and correct the manually configured OSPF cost on the Gigabit interface — it was set to an unreasonably high value, making OSPF treat it as the worse path'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'Serial0/0/0']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 10.1.1.1 255.255.255.252', 'no shutdown', 'ip ospf cost 65535', 'exit',
+    'interface se0/0/0', 'ip address 10.1.2.1 255.255.255.252', 'no shutdown', 'exit',
+    'router ospf 1', 'router-id 5.5.5.5',
+    'network 10.1.1.0 0.0.0.3 area 0', 'network 10.1.2.0 0.0.0.3 area 0',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Gi0/0\'s OSPF cost corrected to a low value (10)', check: s => G.ospfCostIs(s, 'GigabitEthernet0/0', 10), hint: 'interface gi0/0, then: ip ospf cost 10', why: "OSPF prefers the path with the LOWEST total cost — 65535 is effectively the worst possible value, which is exactly why the far slower serial backup link (using its normal, much lower auto-calculated cost) was being preferred instead. This is a classic case of a manual cost override actively fighting against, rather than supporting, the intended design." },
+    { desc: 'Serial0/0/0 is untouched — still correctly configured as the backup path', check: s => G.hasIp(s, 'Serial0/0/0', '10.1.2.1', '255.255.255.252') && G.isUp(s, 'Serial0/0/0'), hint: 'Should already be correct — leave it as-is', why: "The serial link itself isn't broken — it's working exactly as a backup path should. The fix is specifically correcting the Gigabit link's cost so OSPF naturally prefers it again, not touching the serial link at all." }
+  ]
+}
+);
+// ============================================================
+// Labs 86-90: SWITCHING TROUBLESHOOTING. Distinct from the
+// switch-related bugs already used in Labs 72, 76, and 80
+// (VLAN/trunk assignment, port-security max, EtherChannel
+// group mismatch) — native VLAN, PortFast/slow reconnect,
+// voice VLAN, root bridge placement, and a VLAN that was
+// referenced but never actually created.
+// ============================================================
+
+LABS.push(
+{
+  id: 86, title: 'Trouble Ticket: Native VLAN Mismatch Warning', difficulty: 'Medium', domain: 'Troubleshooting', est: 12, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "SW1\'s trunk to SW2 (Gi0/1) was reconfigured this week, and CDP has been logging native VLAN mismatch warnings ever since. The rest of the network standardizes on VLAN 99 as the dedicated native VLAN — nothing should ever be left on the default."',
+  requirements: [
+    'Correct the native VLAN on Gi0/1 to 99, matching the network standard',
+    'Leave the rest of the trunk configuration (allowed VLANs) alone'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['GigabitEthernet0/1']), [
+    'enable', 'configure terminal',
+    'interface gi0/1', 'switchport mode trunk', 'switchport trunk allowed vlan 10,20,99',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Native VLAN on Gi0/1 is now 99', check: s => G.nativeVlanIs(s, 'gi0/1', 99), hint: 'interface gi0/1, then: switchport trunk native vlan 99', why: "The native VLAN was left at its default (VLAN 1) instead of being explicitly set to 99. When the two ends of a trunk disagree about which VLAN is native, untagged traffic can leak between VLANs — and leaving it at VLAN 1 specifically is also a well-known VLAN-hopping attack vector, which is exactly why the network standard requires moving it off the default in the first place." },
+    { desc: 'Allowed VLANs (10, 20, 99) are still intact on Gi0/1', check: s => G.trunkAllows(s, 'gi0/1', 10) && G.trunkAllows(s, 'gi0/1', 20) && G.trunkAllows(s, 'gi0/1', 99), hint: 'Should already be set — just confirm the allowed-vlan list is unchanged', why: "The allowed VLAN list was never the problem here — only the native VLAN setting was missing. Confirming the allowed list is untouched verifies a precise fix rather than an accidental overwrite of the whole trunk configuration." }
+  ]
+},
+{
+  id: 87, title: 'Trouble Ticket: Slow Reconnect Every Time a PC Reboots', difficulty: 'Easy', domain: 'Troubleshooting', est: 10, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "Every time someone reboots their desktop, it takes 30+ seconds after Windows loads before the network actually starts working — no DHCP, nothing. It\'s happening on Fa0/3, a completely standard single-PC desk port, no different from any other."',
+  requirements: [
+    'Enable the standard fast-connectivity feature for single-device access ports on Fa0/3',
+    'Also enable the safety feature that protects that setting from accidentally being applied somewhere it shouldn\'t be'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['FastEthernet0/3']), [
+    'enable', 'configure terminal',
+    'interface fa0/3', 'switchport mode access', 'switchport access vlan 10',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'PortFast enabled on Fa0/3', check: s => G.portfastEnabled(s, 'fa0/3'), hint: 'interface fa0/3, then: spanning-tree portfast', why: "Without PortFast, every access port goes through STP's full listening/learning delay (up to 30 seconds) before it starts forwarding traffic — exactly matching the reported symptom. PortFast lets a port that only ever connects to a single end device skip straight to forwarding, since there's no possibility of it creating a loop." },
+    { desc: 'BPDU Guard enabled on Fa0/3', check: s => G.bpduguardEnabled(s, 'fa0/3'), hint: 'spanning-tree bpduguard enable', why: "PortFast assumes this port will only ever see an end host, never another switch — BPDU Guard is the safety net for when that assumption turns out to be wrong. If a BPDU ever shows up on this port (meaning someone plugged in a switch or hub instead of a PC), the port is immediately disabled rather than risking a loop." }
+  ]
+},
+{
+  id: 88, title: 'Trouble Ticket: IP Phone Audio Quality Complaints', difficulty: 'Medium', domain: 'Troubleshooting', est: 12, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "Everyone with a desk phone on Fa0/4 is complaining about choppy call audio. The PC behind the phone has perfectly normal data VLAN connectivity — it\'s specifically the phone\'s voice traffic that sounds bad."',
+  requirements: [
+    'Configure the voice VLAN (50) on Fa0/4 so the phone\'s traffic is properly tagged and separated from PC data traffic',
+    'Leave the existing data VLAN assignment for the PC untouched'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['FastEthernet0/4']), [
+    'enable', 'configure terminal',
+    'interface fa0/4', 'switchport mode access', 'switchport access vlan 10',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Voice VLAN 50 is now configured on Fa0/4', check: s => G.voiceVlanIs(s, 'fa0/4', 50), hint: 'interface fa0/4, then: switchport voice vlan 50', why: "Without a voice VLAN configured, the phone has no dedicated, properly tagged VLAN to place its own traffic into — it ends up mixed in with the PC's regular data traffic on VLAN 10 instead, with none of the QoS prioritization a dedicated voice VLAN is designed to provide. That lack of prioritization under normal data traffic load is exactly what produces choppy call audio." },
+    { desc: 'The data VLAN (10) assignment for the PC is still correct', check: s => G.accessVlanIs(s, 'fa0/4', 10), hint: 'Should already be set — just confirm it while adding the voice VLAN', why: "The access VLAN and voice VLAN are two separate, complementary settings on the same port — access VLAN handles the PC's data traffic, voice VLAN handles the phone's traffic. Adding the voice VLAN shouldn't touch or replace the existing access VLAN setting." }
+  ]
+},
+{
+  id: 89, title: 'Trouble Ticket: Wrong Switch Became Root Bridge', difficulty: 'Medium', domain: 'Troubleshooting', est: 12, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "SW1 was supposed to be the STP root bridge for VLAN 10 by design — it\'s the most centrally located, highest-capacity switch. But \'show spanning-tree\' shows a completely different, much smaller switch elsewhere in the building won the root election instead, and traffic patterns have been suboptimal ever since."',
+  requirements: [
+    'Configure SW1 as the root primary for VLAN 10 so it wins the election as originally designed'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['GigabitEthernet0/1', 'GigabitEthernet0/2']), [
+    'enable', 'configure terminal',
+    'spanning-tree mode rapid-pvst',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'SW1 is now root primary for VLAN 10', check: s => G.stpRootRoleIs(s, 10, 'primary'), hint: 'spanning-tree vlan 10 root primary', why: "Without explicitly configuring a root bridge, STP falls back to its default election — lowest Bridge ID wins, which is really just whichever switch happens to have the lowest priority-plus-MAC-address combination, with zero regard for which switch actually has the capacity or central location to handle being the root. The 'root primary' command was simply never issued, so the election defaulted to an unintended winner." },
+    { desc: 'STP mode remains rapid-pvst', check: s => G.stpModeIs(s, 'rapid-pvst'), hint: 'Should already be set — no need to change it', why: "The STP mode itself was already correctly set to rapid-pvst for fast convergence — the missing piece was specifically the root bridge placement, not the underlying STP variant in use." }
+  ]
+},
+{
+  id: 90, title: 'Trouble Ticket: Port Landed on the Wrong VLAN Entirely', difficulty: 'Medium', domain: 'Troubleshooting', est: 12, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "A new workstation was plugged into Fa0/6 for the new marketing pod. The port shows connected and in access mode, but the device can\'t get a DHCP address or reach the marketing subnet at all — as if it landed on a completely different network than intended." VLAN 40 (MARKETING) already exists and works fine elsewhere in the building.',
+  requirements: [
+    'Assign Fa0/6 to VLAN 40 — it was left on the default VLAN and never actually assigned'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['FastEthernet0/6']), [
+    'enable', 'configure terminal',
+    'vlan 40', 'name MARKETING', 'exit',
+    'interface fa0/6', 'switchport mode access',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Fa0/6 is now assigned to VLAN 40', check: s => G.accessVlanIs(s, 'fa0/6', 40), hint: 'interface fa0/6, then: switchport access vlan 40', why: "The port was correctly set to access mode, but the actual VLAN assignment step — 'switchport access vlan 40' — was never typed. Without it, an access port defaults to VLAN 1, which is a completely different broadcast domain than the marketing subnet the device actually needs, matching the reported symptom of the device seeming to land on the wrong network entirely." },
+    { desc: 'Fa0/6 is still in access mode (not accidentally switched to trunk)', check: s => { const i = G.iface(s, 'fa0/6'); return !!i && i.switchport.mode === 'access'; }, hint: 'Should already be set — just confirm it while assigning the VLAN', why: "The access mode setting was already correct — the fix only needed to add the missing VLAN assignment on top of it, not change the port mode itself." }
+  ]
+}
+);
+
+// ============================================================
+// Labs 91-95: MEGA TROUBLE TICKETS. Medium-Hard, 8-10 distinct
+// bugs each, combined into one realistic deployment/audit/move
+// scenario per lab. These lean heavily on the expanded show
+// command set (show interfaces status, show spanning-tree,
+// show etherchannel summary, show ip ospf interface brief,
+// show ip protocols, show port-security, show standby brief,
+// show ip nat statistics, show cdp interface) to diagnose,
+// same as a real exam troubleshooting sim.
+// ============================================================
+
+LABS.push(
+{
+  id: 91, title: 'Trouble Ticket: New Branch Router Deployment Gone Wrong', difficulty: 'Hard', domain: 'Troubleshooting', est: 30, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "BR1 was deployed to the new branch office yesterday. Almost nothing is working right — users can\'t reach the LAN fully, nobody can get to the internet, OSPF routes aren\'t showing up correctly elsewhere, and the security team flagged the device as failing their baseline checklist entirely." Use "show ip interface brief", "show ip protocols", "show ip nat statistics", and "show running-config" to work through this systematically — there are 9 separate things wrong.',
+  requirements: [
+    'Fix the LAN interface\'s subnet mask (Gi0/0)',
+    'Bring up the WAN interface (Gi0/1) — it was left administratively down',
+    'Mark Gi0/1 as the NAT outside interface — it was never marked at all',
+    'Add the missing default route toward the ISP (via 203.0.113.2)',
+    'Correct the OSPF network statement\'s wildcard mask for the LAN',
+    'Configure the missing enable secret',
+    'Create the missing local admin account (privilege 15, with a secret)',
+    'Restrict VTY transport to SSH only — Telnet is still allowed',
+    'Add the missing MOTD banner (must contain "Unauthorized")'
+  ],
+  initial: () => preconfigured(routerState('BR1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']), [
+    'enable', 'configure terminal', 'hostname BR1',
+    'interface gi0/0', 'ip address 192.168.10.1 255.255.255.128', 'description LAN', 'no shutdown', 'ip nat inside', 'exit',
+    'interface gi0/1', 'ip address 203.0.113.1 255.255.255.252', 'description WAN to ISP', 'exit',
+    'access-list 1 permit 192.168.10.0 0.0.0.255',
+    'ip nat inside source list 1 interface gi0/1 overload',
+    'router ospf 1', 'router-id 1.1.1.1', 'network 192.168.10.0 0.0.0.0 area 0', 'exit',
+    'ip domain-name lab.local', 'crypto key generate rsa',
+    'line vty 0 4', 'login local', 'transport input telnet ssh', 'exit',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Gi0/0 mask corrected to 255.255.255.0', check: s => G.hasIp(s, 'GigabitEthernet0/0', '192.168.10.1', '255.255.255.0'), hint: 'interface gi0/0, then: ip address 192.168.10.1 255.255.255.0', why: "A /25 was configured instead of a /24, silently cutting the LAN's usable address range in half — exactly the kind of thing 'show ip interface brief' won't reveal (it just shows the interface as up/up) but comparing the configured mask against the intended design does." },
+    { desc: 'Gi0/1 (WAN) is now up', check: s => G.isUp(s, 'GigabitEthernet0/1'), hint: 'interface gi0/1, then: no shutdown', why: "The WAN interface was fully addressed but never brought up — 'show ip interface brief' would show it as 'administratively down,' which explains why absolutely nothing could reach the internet no matter how correct the NAT and routing configuration was otherwise." },
+    { desc: 'Gi0/1 is now marked NAT outside', check: s => G.natSideIs(s, 'GigabitEthernet0/1', 'outside'), hint: 'interface gi0/1, then: ip nat outside', why: "'show ip nat statistics' would reveal Gi0/0 listed as an inside interface but NO outside interface listed at all — NAT categorically cannot translate anything without both sides marked, regardless of how correct the ACL and overload command are." },
+    { desc: 'Default route via 203.0.113.2 now exists', check: s => G.hasDefaultRoute(s, '203.0.113.2'), hint: 'ip route 0.0.0.0 0.0.0.0 203.0.113.2', why: "Even once Gi0/1 is up and NAT is fully fixed, the router still has no instruction to actually send unmatched (internet-bound) traffic toward the ISP at all without this route — 'show ip route' would show only the two directly connected networks and nothing else." },
+    { desc: 'OSPF network statement wildcard corrected to 0.0.0.255', check: s => G.ospfAdvertises(s, '192.168.10.0', '0.0.0.255', 0), hint: 'router ospf 1, then: network 192.168.10.0 0.0.0.255 area 0', why: "The wildcard 0.0.0.0 only matches an interface with the EXACT address 192.168.10.0 — since the real interface is 192.168.10.1, it never actually matched, meaning OSPF silently never enabled itself on that interface at all despite the network statement technically being present. 'show ip ospf interface brief' would show Gi0/0 missing from the OSPF-enabled interface list entirely." },
+    { desc: 'Enable secret is now configured', check: s => G.enableSecretSet(s), hint: 'enable secret Cisco123!', why: "A brand-new device with no enable secret at all means anyone who reaches the CLI can walk straight into privileged/configuration mode — an automatic fail on any security baseline checklist." },
+    { desc: 'Local admin account exists (privilege 15, with a secret)', check: s => G.userExists(s, 'admin', { privilege: 15, hasSecret: true }), hint: 'username admin privilege 15 secret AdminPass1', why: "Without a real local account, VTY 'login local' has no actual username to authenticate against — combined with the missing enable secret, this device currently has essentially no meaningful administrative access control at all." },
+    { desc: 'VTY transport restricted to SSH only', check: s => G.vtyTransportIs(s, ['ssh']), hint: 'line vty 0 4, then: transport input ssh', why: "Telnet sends every keystroke — including whatever password eventually gets configured — in cleartext across the network. Leaving 'telnet ssh' both enabled means the encrypted option (SSH) exists, but the insecure one is still just as usable, defeating much of the point of having SSH at all." },
+    { desc: 'MOTD banner configured with "Unauthorized"', check: s => G.bannerContains(s, 'unauthorized'), hint: 'banner motd #Unauthorized access is prohibited#', why: "No legal warning banner means no baseline notice was ever presented to anyone connecting to this device — the kind of finding that shows up on nearly every security audit checklist as a required, easy-to-fix baseline control." }
+  ]
+},
+{
+  id: 92, title: 'Trouble Ticket: The Distribution Switch Meltdown', difficulty: 'Hard', domain: 'Troubleshooting', est: 30, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "SW1 (a distribution-layer switch) is a mess after yesterday\'s maintenance window. Wrong VLANs, no port security where it should be, slow reconnects, a trunk that isn\'t matching the network standard, and the EtherChannel to the core switch isn\'t even bundling." Use "show vlan brief", "show interfaces trunk", "show interfaces status", "show port-security", "show spanning-tree", "show etherchannel summary", and "show cdp interface" to work through all 9 issues.',
+  requirements: [
+    'Correct Fa0/1\'s VLAN assignment — it should be VLAN 10 (SALES), not VLAN 20',
+    'Enable port security on Fa0/2 (max 1, sticky, violation shutdown) — it was never configured at all',
+    'Enable PortFast on Fa0/3 (an end-user access port)',
+    'Enable BPDU Guard on Fa0/3',
+    'Fix the native VLAN on the Gi0/1 trunk — it should be 99, matching the network standard',
+    'Disable CDP on Gi0/1 — it faces a less-trusted uplink and shouldn\'t be advertising device details there',
+    'Fix the channel-group mismatch between Fa0/4 and Fa0/5 — they should both be in group 1',
+    'Configure Port-channel1 as a trunk — it was created but never actually configured'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['FastEthernet0/1', 'FastEthernet0/2', 'FastEthernet0/3', 'GigabitEthernet0/1', 'FastEthernet0/4', 'FastEthernet0/5', 'Port-channel1']), [
+    'enable', 'configure terminal',
+    'vlan 10', 'name SALES', 'exit', 'vlan 20', 'name IT', 'exit', 'vlan 99', 'name NATIVE', 'exit',
+    'interface fa0/1', 'switchport mode access', 'switchport access vlan 20', 'exit',
+    'interface fa0/2', 'switchport mode access', 'switchport access vlan 20', 'exit',
+    'interface fa0/3', 'switchport mode access', 'switchport access vlan 10', 'exit',
+    'interface gi0/1', 'switchport mode trunk', 'switchport trunk allowed vlan 10,20,99', 'exit',
+    'interface fa0/4', 'channel-group 1 mode active', 'exit',
+    'interface fa0/5', 'channel-group 2 mode active', 'exit',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Fa0/1 corrected to VLAN 10', check: s => G.accessVlanIs(s, 'fa0/1', 10), hint: 'interface fa0/1, then: switchport access vlan 10', why: "Fa0/1 was assigned to VLAN 20 (IT) instead of VLAN 10 (SALES) — 'show vlan brief' would show it listed under the wrong VLAN entirely, putting whoever's connected there on the wrong broadcast domain." },
+    { desc: 'Fa0/2 port security fully configured (max 1, sticky, violation shutdown)', check: s => G.portSecurityMax(s, 'fa0/2', 1) && G.portSecurityStickyMac(s, 'fa0/2') && G.portSecurityViolation(s, 'fa0/2', 'shutdown'), hint: 'switchport port-security / switchport port-security maximum 1 / switchport port-security mac-address sticky / switchport port-security violation shutdown', why: "'show port-security' would show Fa0/2 completely missing from the list — meaning this port currently has zero protection against someone plugging in an unmanaged switch to add unauthorized devices, despite it being a standard requirement for every access port here." },
+    { desc: 'PortFast enabled on Fa0/3', check: s => G.portfastEnabled(s, 'fa0/3'), hint: 'interface fa0/3, then: spanning-tree portfast', why: "Without PortFast, this access port goes through STP's full up-to-30-second listening/learning delay every time a device connects — 'show spanning-tree' would show it missing PortFast while other access ports have it enabled." },
+    { desc: 'BPDU Guard enabled on Fa0/3', check: s => G.bpduguardEnabled(s, 'fa0/3'), hint: 'spanning-tree bpduguard enable', why: "PortFast alone assumes this port will only ever see an end host — BPDU Guard is the safety net if that assumption is ever wrong, immediately disabling the port instead of risking a loop if a BPDU shows up there." },
+    { desc: 'Native VLAN on Gi0/1 corrected to 99', check: s => G.nativeVlanIs(s, 'gi0/1', 99), hint: 'interface gi0/1, then: switchport trunk native vlan 99', why: "The native VLAN was left at the default (VLAN 1) instead of the network standard (99) — a native VLAN mismatch with the switch on the other end of this trunk risks untagged traffic leaking between VLANs, and leaving it at VLAN 1 specifically is also a known VLAN-hopping attack vector." },
+    { desc: 'CDP disabled on Gi0/1', check: s => G.cdpDisabledOn(s, 'gi0/1'), hint: 'no cdp enable (while still inside interface gi0/1)', why: "'show cdp interface' would show Gi0/1 still advertising CDP — since this link faces a less-trusted uplink, it's broadcasting platform, IOS version, and IP address information in clear text to anything connected there, which is exactly the kind of exposure CDP hardening on untrusted links is meant to prevent." },
+    { desc: 'Fa0/5 corrected to channel-group 1 (matching Fa0/4)', check: s => G.channelGroupIs(s, 'fa0/5', 1, 'active'), hint: 'interface fa0/5, then: channel-group 1 mode active', why: "'show etherchannel summary' would show two separate, incomplete channel groups (1 and 2) instead of one properly bundled EtherChannel — both member ports intended for the same bundle need to reference the exact same channel-group number." },
+    { desc: 'Fa0/4 remains correctly in channel-group 1, active', check: s => G.channelGroupIs(s, 'fa0/4', 1, 'active'), hint: 'Should already be correct — just confirm it while fixing Fa0/5', why: "Fa0/4's configuration was correct from the start — this is the working half that shows what Fa0/5 should have matched." },
+    { desc: 'Port-channel1 is now configured as a trunk', check: s => G.isTrunk(s, 'Port-channel1'), hint: 'interface port-channel 1, then: switchport mode trunk', why: "The logical Port-channel1 interface was created by the channel-group commands, but nobody ever actually configured it — once physical ports are bundled, trunking (and any VLAN restrictions) has to be applied to the Port-channel interface itself, not the individual member ports." }
+  ]
+},
+{
+  id: 93, title: 'Trouble Ticket: OSPF Rollout Gone Wrong', difficulty: 'Hard', domain: 'Troubleshooting', est: 25, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "R1 just finished a fresh OSPF rollout across three interfaces. Almost nothing is working as designed — routes are missing, a neighbor relationship that should be authenticated is down, and traffic that should prefer one path is going the wrong way." Use "show ip protocols" and "show ip ospf interface brief" together to compare what\'s actually configured against what the design called for — there are 7 separate issues.',
+  requirements: [
+    'Set the missing OSPF router-id to 7.7.7.7',
+    'Correct Gi0/0\'s network statement wildcard mask (it should cover the full /24, not just one host)',
+    'Remove the incorrect passive-interface setting from Gi0/0 — it\'s a router-to-router uplink and needs to form a neighbor',
+    'Correct the OSPF authentication key on Gi0/1 — it should be "Rollout2024"',
+    'Correct the area number on Gi0/1\'s network statement — it should be Area 0, not Area 2',
+    'Add the completely missing network statement for Gi0/2\'s subnet (192.168.3.0/24) into Area 0',
+    'Correct Gi0/2\'s manually configured OSPF cost — it was set absurdly high and should be 10'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2']), [
+    'enable', 'configure terminal',
+    'interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit',
+    'interface gi0/1', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'ip ospf authentication', 'ip ospf authentication-key Rollout2025', 'exit',
+    'interface gi0/2', 'ip address 192.168.3.1 255.255.255.0', 'no shutdown', 'ip ospf cost 65535', 'exit',
+    'router ospf 1',
+    'network 192.168.1.0 0.0.0.0 area 0',
+    'network 192.168.2.0 0.0.0.255 area 2',
+    'passive-interface gi0/0',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Router-id is now set to 7.7.7.7', check: s => G.ospfRouterIdIs(s, '7.7.7.7'), hint: 'router ospf 1, then: router-id 7.7.7.7', why: "No router-id was ever explicitly set, leaving OSPF to fall back on auto-selection — 'show ip protocols' would show this as blank or an unexpected auto-selected value, making this router harder to reliably identify in the rest of the network's OSPF topology." },
+    { desc: 'Gi0/0 network wildcard corrected to 0.0.0.255 (still Area 0)', check: s => G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), hint: 'network 192.168.1.0 0.0.0.255 area 0', why: "The wildcard 0.0.0.0 only matches the exact address 192.168.1.0 — since the real interface address is 192.168.1.1, it never actually matched, so 'show ip ospf interface brief' would show Gi0/0 completely missing from the OSPF-enabled interface list, network statement or not." },
+    { desc: 'Gi0/0 is no longer a passive OSPF interface', check: s => G.ospfNotPassiveOn(s, 'GigabitEthernet0/0'), hint: 'no passive-interface gi0/0', why: "A passive interface never sends or listens for OSPF Hellos, which means it can never form a neighbor relationship — this setting is meant for end-host-facing links with no other routers on them, and it was mistakenly applied to what's actually a router-to-router uplink here." },
+    { desc: 'Gi0/1 OSPF authentication key corrected to Rollout2024', check: s => G.ospfAuthConfigured(s, 'GigabitEthernet0/1', 'Rollout2024'), hint: 'interface gi0/1, then: ip ospf authentication-key Rollout2024', why: "The configured key is 'Rollout2025' — one character off from the actual network standard 'Rollout2024'. OSPF authentication requires an exact match between neighbors; even a single-character mismatch causes every Hello to be silently rejected, which looks identical to the link simply being down." },
+    { desc: 'Gi0/1 network statement area corrected to 0', check: s => G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0), hint: 'network 192.168.2.0 0.0.0.255 area 0', why: "This network was placed in Area 2 instead of Area 0, but nothing in this design has an Area 2-to-backbone connection configured — a non-backbone area with no path back to Area 0 is effectively isolated from the rest of the OSPF domain." },
+    { desc: '192.168.3.0/24 (Gi0/2) now advertised into Area 0', check: s => G.ospfAdvertises(s, '192.168.3.0', '0.0.0.255', 0), hint: 'network 192.168.3.0 0.0.0.255 area 0', why: "Gi0/2 was fully addressed and brought up, but no network statement was ever added for it at all — configuring an interface's IP address does not automatically advertise it into OSPF; that missing statement is the entire reason this subnet is invisible to the rest of the network." },
+    { desc: 'Gi0/2 OSPF cost corrected to 10', check: s => G.ospfCostIs(s, 'GigabitEthernet0/2', 10), hint: 'interface gi0/2, then: ip ospf cost 10', why: "A cost of 65535 is effectively the worst possible value OSPF can use — once this subnet is actually being advertised, this absurdly high manual cost would make OSPF treat this path as a last resort even when it should clearly be preferred, actively fighting against the intended routing design." }
+  ]
+},
+{
+  id: 94, title: 'Trouble Ticket: Security Audit Failures', difficulty: 'Hard', domain: 'Troubleshooting', est: 30, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "R1 failed nearly every item on this quarter\'s security baseline audit. Ten findings total — missing credentials, an ACL that\'s scoped to the wrong subnet, no console protection, no banner, DHCP snooping that\'s only half-configured, and a completely unprotected access port." Use "show running-config", "show port-security", and careful comparison against the security checklist to work through every finding.',
+  requirements: [
+    'Configure the missing enable secret',
+    'Create the missing local admin account (privilege 15, with a secret)',
+    'Restrict VTY transport to SSH only — Telnet is still permitted',
+    'Correct the VTY access-class ACL — it\'s scoped to the wrong subnet (10.10.99.0 instead of the real management subnet, 10.10.10.0)',
+    'Set a console password',
+    'Require login at the console',
+    'Add the missing MOTD banner (must contain "Unauthorized")',
+    'Enable DHCP snooping globally — it was only ever enabled per-VLAN, never globally',
+    'Mark Gi0/1 (the legitimate DHCP server uplink) as a trusted DHCP snooping port',
+    'Enable full port security on Fa0/1 (max 1, sticky, violation shutdown) — it has none at all'
+  ],
+  initial: () => preconfigured(routerState('R1', ['GigabitEthernet0/0', 'GigabitEthernet0/1']), [
+    'enable', 'configure terminal',
+    'access-list 10 permit 10.10.99.0 0.0.0.255',
+    'line vty 0 4', 'access-class 10 in', 'login local', 'transport input telnet ssh', 'exit',
+    'ip dhcp snooping vlan 10',
+    'interface fa0/1', 'switchport mode access', 'switchport access vlan 10', 'exit',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Enable secret is now configured', check: s => G.enableSecretSet(s), hint: 'enable secret Cisco123!', why: "No enable secret at all means anyone reaching the CLI can walk straight into privileged mode — a guaranteed automatic fail on any security audit's very first checklist item." },
+    { desc: 'Local admin account exists (privilege 15, with a secret)', check: s => G.userExists(s, 'admin', { privilege: 15, hasSecret: true }), hint: 'username admin privilege 15 secret AdminPass1', why: "'login local' on the VTY lines is already configured, but there's no actual local account for it to authenticate against — currently nobody could even log in through the 'secured' path at all." },
+    { desc: 'VTY transport restricted to SSH only', check: s => G.vtyTransportIs(s, ['ssh']), hint: 'line vty 0 4, then: transport input ssh', why: "Telnet sends every keystroke — including passwords — in cleartext. Leaving 'telnet ssh' both enabled means the insecure option is still fully usable even though SSH is available, which is exactly the kind of finding an audit flags." },
+    { desc: 'ACL 10 corrected to permit the real management subnet, 10.10.10.0/24', check: s => G.aclHasRule(s, 10, 'permit', '10.10.10.0 0.0.0.255'), hint: 'access-list 10 permit 10.10.10.0 0.0.0.255 — you don\'t need to remove the old incorrect line', why: "The ACL restricting VTY access is scoped to 10.10.99.0, not the real 10.10.10.0 management subnet — meaning the actual ops team currently can't even reach the login prompt, while the restriction itself provides no real protection since it's guarding the wrong subnet entirely." },
+    { desc: 'Console password is set', check: s => G.consolePasswordSet(s), hint: 'line console 0, then: password Cisco@123', why: "An unprotected console port is a real, physically-exploitable exposure in a shared office or unlocked wiring closet — and a common, easy-to-fix audit finding." },
+    { desc: 'Console requires login', check: s => s.lines.console.login !== 'none', hint: 'Inside line console 0: login', why: "Setting a password alone doesn't force IOS to actually prompt for it — without the separate 'login' command, the console remains fully open regardless of whatever password gets configured." },
+    { desc: 'MOTD banner configured with "Unauthorized"', check: s => G.bannerContains(s, 'unauthorized'), hint: 'banner motd #Unauthorized access is prohibited#', why: "No legal warning banner is present at all — a standard, near-universal baseline audit requirement that's completely missing here." },
+    { desc: 'DHCP snooping enabled globally', check: s => G.dhcpSnoopingEnabled(s), hint: 'ip dhcp snooping (the bare global command, separate from the per-VLAN line)', why: "'ip dhcp snooping vlan 10' only tells the switch WHICH VLAN to watch — it doesn't actually turn the feature on. Without the separate bare 'ip dhcp snooping' global command, none of the per-VLAN or per-port trust settings do anything at all, leaving the network completely unprotected against a rogue DHCP server despite appearing partially configured." },
+    { desc: 'Gi0/1 marked as a trusted DHCP snooping port', check: s => G.dhcpSnoopingTrusted(s, 'gi0/1'), hint: 'interface gi0/1, then: ip dhcp snooping trust', why: "Once snooping is properly enabled, every port defaults to untrusted — including the uplink toward the legitimate DHCP server. Without explicitly marking it trusted, even the real DHCP server's replies would be blocked, breaking DHCP entirely instead of just blocking rogue servers." },
+    { desc: 'Fa0/1 has full port security (max 1, sticky, violation shutdown)', check: s => G.portSecurityMax(s, 'fa0/1', 1) && G.portSecurityStickyMac(s, 'fa0/1') && G.portSecurityViolation(s, 'fa0/1', 'shutdown'), hint: 'switchport port-security / switchport port-security maximum 1 / switchport port-security mac-address sticky / switchport port-security violation shutdown', why: "'show port-security' would show this port completely absent — meaning anyone could plug an unmanaged switch into Fa0/1 and add unlimited unauthorized devices with zero restriction, a clear audit failure for a standard access port." }
+  ]
+},
+{
+  id: 95, title: 'Trouble Ticket: The Great Office Move', difficulty: 'Hard', domain: 'Troubleshooting', est: 30, isTroubleshooting: true,
+  scenario: 'Helpdesk ticket: "The Staff team moved to the new 3rd floor this weekend. Now almost nothing works right — some devices land on the wrong network, the trunk to the new floor\'s switch isn\'t carrying the right VLANs, the backup gateway won\'t take over properly, and DHCP is handing out barely any addresses." Use "show vlan brief", "show interfaces trunk", "show standby brief", and "show running-config" to work through all 8 issues from the rushed move.',
+  requirements: [
+    'Assign Fa0/1 to VLAN 10 (STAFF) — it was left completely unassigned',
+    'Correct the native VLAN on the Gi0/1 trunk to the new floor\'s switch — it should be 99',
+    'Add VLAN 10 to the trunk\'s allowed VLAN list — only 99 was allowed, cutting off all STAFF traffic',
+    'Correct the VLAN 10 SVI\'s subnet mask — it should be a full /24, not the smaller range currently configured',
+    'Raise the HSRP priority on the VLAN 10 SVI to 150',
+    'Enable HSRP preempt on the VLAN 10 SVI',
+    'Correct the DHCP pool\'s subnet mask — it was typo\'d far too small during the move',
+    'Add the missing DHCP exclusion range (192.168.10.1 through 192.168.10.10) so the gateway and HSRP virtual IP never get leased out'
+  ],
+  initial: () => preconfigured(switchState('SW1', ['FastEthernet0/1', 'GigabitEthernet0/1', 'Vlan10']), [
+    'enable', 'configure terminal',
+    'vlan 10', 'name STAFF', 'exit', 'vlan 99', 'name NATIVE', 'exit',
+    'interface fa0/1', 'switchport mode access', 'exit',
+    'interface gi0/1', 'switchport mode trunk', 'switchport trunk allowed vlan 99', 'exit',
+    'interface vlan 10', 'ip address 192.168.10.2 255.255.255.128', 'no shutdown', 'standby 10 ip 192.168.10.1', 'exit',
+    'ip dhcp pool STAFF_POOL', 'network 192.168.10.0 255.255.255.240', 'default-router 192.168.10.1', 'dns-server 8.8.8.8', 'exit',
+    'end'
+  ]),
+  objectives: [
+    { desc: 'Fa0/1 is now assigned to VLAN 10', check: s => G.accessVlanIs(s, 'fa0/1', 10), hint: 'interface fa0/1, then: switchport access vlan 10', why: "The port was set to access mode but never actually assigned to VLAN 10 during the rushed move — 'show vlan brief' would show it still sitting in the default VLAN, meaning it can't reach anything on the actual STAFF network." },
+    { desc: 'Native VLAN on Gi0/1 corrected to 99', check: s => G.nativeVlanIs(s, 'gi0/1', 99), hint: 'interface gi0/1, then: switchport trunk native vlan 99', why: "The native VLAN was left at the default (VLAN 1) instead of the standard 99 — 'show interfaces trunk' on both ends would show a mismatch, risking untagged traffic leaking between VLANs across this new trunk." },
+    { desc: 'Trunk now allows VLAN 10 in addition to 99', check: s => G.trunkAllows(s, 'gi0/1', 10) && G.trunkAllows(s, 'gi0/1', 99), hint: 'switchport trunk allowed vlan add 10 — using "add" keeps VLAN 99 in the list instead of overwriting it', why: "Only VLAN 99 was ever allowed across this trunk — VLAN 10 (STAFF) traffic has had no way to cross to the new floor's switch at all since the move, which is almost certainly the single biggest reason 'almost nothing works.'" },
+    { desc: 'VLAN 10 SVI mask corrected to 255.255.255.0', check: s => G.hasIp(s, 'Vlan10', '192.168.10.2', '255.255.255.0'), hint: 'interface vlan 10, then: ip address 192.168.10.2 255.255.255.0', why: "A /25 (255.255.255.128) was configured instead of the intended /24, cutting the usable address range roughly in half — exactly the kind of thing that causes some devices to land outside the SVI's actual subnet depending on which address they end up with." },
+    { desc: 'HSRP priority raised to 150', check: s => G.hsrpPriority(s, 'Vlan10', 10, 150), hint: 'interface vlan 10, then: standby 10 priority 150', why: "Priority was never explicitly set, leaving it at the default of 100 — without a clearly higher priority than any backup gateway elsewhere on the new floor, there's no guarantee this switch reliably wins the active HSRP role at all." },
+    { desc: 'HSRP preempt enabled', check: s => G.hsrpPreempt(s, 'Vlan10'), hint: 'standby 10 preempt', why: "Without preempt, even a correctly higher-priority gateway won't automatically reclaim the active role after any brief outage — a backup that took over during the move would simply stay active indefinitely instead of handing control back." },
+    { desc: 'DHCP pool mask corrected to 255.255.255.0', check: s => G.dhcpPoolNetwork(s, 'STAFF_POOL', '192.168.10.0', '255.255.255.0'), hint: 'ip dhcp pool STAFF_POOL, then: network 192.168.10.0 255.255.255.0', why: "The pool was configured as a /28 (255.255.255.240) — only 16 total addresses — instead of the intended /24, matching the reported symptom of DHCP barely being able to hand out addresses to the whole relocated team." },
+    { desc: 'DHCP exclusion range .1–.10 added', check: s => G.hasDhcpExclusion(s, '192.168.10.1', '192.168.10.10'), hint: 'ip dhcp excluded-address 192.168.10.1 192.168.10.10', why: "Without this exclusion, DHCP has no way to know that .1 (the HSRP virtual gateway) is already spoken for — it could eventually hand that exact address out to a regular client, creating a direct IP conflict with the gateway every device on the floor depends on." }
+  ]
+}
+);
+
 if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
 </script>
     <script>
@@ -1933,15 +3061,23 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
         let labCtx = null;
         let terminalHistory = [];
         let terminalHistoryPos = -1;
+        let currentLabFilter = 'all';
 
         function renderLabGrid() {
+            document.getElementById('count-all').innerText = LABS.length;
+            document.getElementById('count-easy').innerText = LABS.filter(l => l.difficulty === 'Easy').length;
+            document.getElementById('count-medium').innerText = LABS.filter(l => l.difficulty === 'Medium').length;
+            document.getElementById('count-hard').innerText = LABS.filter(l => l.difficulty === 'Hard').length;
+
             const grid = document.getElementById('lab-grid');
             grid.innerHTML = '';
-            LABS.forEach(lab => {
+            const visibleLabs = currentLabFilter === 'all' ? LABS : LABS.filter(l => l.difficulty === currentLabFilter);
+            visibleLabs.forEach(lab => {
                 const div = document.createElement('div');
                 div.className = 'lab-card';
                 div.onclick = () => startLab(lab.id);
                 div.innerHTML = `<div class="lab-meta">
+                        ${lab.isTroubleshooting ? '<span class="lab-badge trouble">🔧 Troubleshooting</span>' : ''}
                         <span class="lab-badge diff-${lab.difficulty}">${lab.difficulty}</span>
                         <span class="lab-badge">${lab.domain}</span>
                         <span class="lab-badge">~${lab.est} min</span>
@@ -1950,6 +3086,14 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
                     <p>${lab.scenario}</p>`;
                 grid.appendChild(div);
             });
+        }
+
+        function filterLabs(filter) {
+            currentLabFilter = filter;
+            document.querySelectorAll('#lab-filter-bar .top-tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-filter') === filter);
+            });
+            renderLabGrid();
         }
 
         function startLab(labId) {
@@ -1969,7 +3113,11 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
             reqList.innerHTML = currentLab.requirements.map(r => `<li>${escapeHtml(r)}</li>`).join('');
 
             document.getElementById('terminal-body').innerHTML = '';
-            appendTerminalRaw('Simulated IOS terminal ready. Type commands below (Enter to run, ↑/↓ for history).');
+            if (currentLab.isTroubleshooting) {
+                appendTerminalRaw('⚠ This device already has a configuration loaded — something in it is broken. Run "show running-config" to inspect it before making changes.', 'terminal-line-error');
+            } else {
+                appendTerminalRaw('Simulated IOS terminal ready. Type commands below (Enter to run, ↑/↓ for history).');
+            }
             renderObjectives([]);
             updatePrompt();
             document.getElementById('terminal-input').value = '';
