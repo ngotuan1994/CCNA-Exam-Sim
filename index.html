@@ -117,7 +117,7 @@
     <div class="container">
         <header>
             <h1>CCNA 200-301 Practice Portal</h1>
-            <p>8 full-length practice exams (800 unique questions) &middot; a randomized mixed-pool mode &middot; and 115 hands-on CLI labs</p>
+            <p>8 full-length practice exams (800 unique questions) &middot; a randomized mixed-pool mode &middot; and 135 hands-on CLI labs</p>
         </header>
 
         <div class="top-tabs">
@@ -3869,7 +3869,567 @@ LABS.push(
 }
 );
 
+// ---- Compact task builder for the "essentials" labs (116-135) ----
+// Each task lists the exact commands that satisfy it, so the hint shown to the
+// learner is generated from the same commands the verification replays.
+function tk(d, m, c, w, p) { return { d: d, m: m, c: c, w: w, p: p || [] }; }
+function hintFromCmds(m, p) {
+  const body = m.filter(x => x !== 'exit').join(' / ');
+  const post = (p || []).join(' / ');
+  if (body && post) return body + ' (then, from privileged mode: ' + post + ')';
+  if (post) return 'From privileged mode: ' + post;
+  return body;
+}
+function buildLab(meta, brief, tasks) {
+  const sol = ['enable', 'configure terminal'];
+  tasks.forEach(t => t.m.forEach(x => sol.push(x)));
+  sol.push('end');
+  tasks.forEach(t => t.p.forEach(x => sol.push(x)));
+  if (typeof LAB_SOLUTIONS !== 'undefined') LAB_SOLUTIONS[meta.id] = sol;
+  return Object.assign({}, meta, {
+    requirements: brief,
+    objectives: tasks.map(t => ({ desc: t.d, check: t.c, hint: hintFromCmds(t.m, t.p), why: t.w }))
+  });
+}
+const addrUp = (n, ip, m) => s => G.hasIp(s, n, ip, m) && G.isUp(s, n);
+const v6Up = (n, a) => s => G.ipv6AddressIs(s, n, a) && G.isUp(s, n);
+const savedCfg = s => s.savedToStartup === true;
+const SAVE_WHY = "The running-config lives in RAM and is lost on reload. Copying it to startup-config is what makes the work survive a reboot, and forgetting it is a classic real-world mistake.";
+const SECRET_WHY = "The enable secret guards privileged mode and is stored hashed. Without it, anyone who reaches the user prompt can walk straight into configuration mode.";
+
+LABS.push(
+buildLab({
+  id: 116, title: 'VLSM Addressing Plan', difficulty: 'Medium', domain: 'IP Connectivity', est: 25,
+  scenario: 'Your company was given 192.168.100.0/24 and you must carve it up with VLSM, largest subnet first, so no addresses are wasted. Sales, Engineering, and Guest each sit on their own LAN, two branches connect over point-to-point links, and a loopback identifies the router. Work out the right mask for each block, then configure it. Subnet math like this appears in some form on almost every CCNA exam.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2', 'Serial0/0/0', 'Serial0/0/1'])
+}, [
+  'Block to divide: 192.168.100.0/24. Allocate the largest subnet first.',
+  'Host needs: Sales 50, Engineering 25, Guest 10, and two WAN links with 2 hosts each.',
+  'Blocks in order: 192.168.100.0, .64, .96, .112, .116. The router takes the first usable address in each.',
+  'Loopback0 uses the host address 192.168.100.200/32.'
+], [
+  tk('Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), "Every device gets a meaningful name first: it appears in the prompt, in neighbor tables, and in log messages."),
+  tk('Gi0/0 (Sales, 50 hosts) is 192.168.100.1/26, described, and up', ['interface gi0/0', 'ip address 192.168.100.1 255.255.255.192', 'description SALES', 'no shutdown', 'exit'], s => G.hasIp(s, 'gi0/0', '192.168.100.1', '255.255.255.192') && G.descriptionSet(s, 'gi0/0') && G.isUp(s, 'gi0/0'), "50 hosts needs 6 host bits (2^6 - 2 = 62 usable), so the prefix is /26 = 255.255.255.192. A /27 would only hold 30. This block is .0 through .63."),
+  tk('Gi0/1 (Engineering, 25 hosts) is 192.168.100.65/27 and up', ['interface gi0/1', 'ip address 192.168.100.65 255.255.255.224', 'description ENGINEERING', 'no shutdown', 'exit'], addrUp('gi0/1', '192.168.100.65', '255.255.255.224'), "25 hosts needs 5 host bits (2^5 - 2 = 30), a /27 = 255.255.255.224. It starts at .64 because the /26 above used .0 through .63."),
+  tk('Gi0/2 (Guest, 10 hosts) is 192.168.100.97/28 and up', ['interface gi0/2', 'ip address 192.168.100.97 255.255.255.240', 'description GUEST', 'no shutdown', 'exit'], addrUp('gi0/2', '192.168.100.97', '255.255.255.240'), "10 hosts needs 4 host bits (2^4 - 2 = 14), a /28 = 255.255.255.240. It starts at .96, the next free boundary after the /27 ends at .95."),
+  tk('Se0/0/0 (link to Branch A) is 192.168.100.113/30 and up', ['interface se0/0/0', 'ip address 192.168.100.113 255.255.255.252', 'description BRANCH-A', 'no shutdown', 'exit'], addrUp('se0/0/0', '192.168.100.113', '255.255.255.252'), "A point-to-point link needs exactly 2 hosts, so /30 (2^2 - 2 = 2 usable) wastes nothing. This block is .112 through .115, with .113 and .114 usable."),
+  tk('Se0/0/1 (link to Branch B) is 192.168.100.117/30 and up', ['interface se0/0/1', 'ip address 192.168.100.117 255.255.255.252', 'description BRANCH-B', 'no shutdown', 'exit'], addrUp('se0/0/1', '192.168.100.117', '255.255.255.252'), "The next /30 begins at .116 (.112 + 4), so the usable pair is .117 and .118. Each link needs its own separate subnet."),
+  tk('Loopback0 is 192.168.100.200/32 and up', ['interface loopback0', 'ip address 192.168.100.200 255.255.255.255', 'no shutdown', 'exit'], addrUp('Loopback0', '192.168.100.200', '255.255.255.255'), "A loopback is a single logical host, so it uses a /32 mask. It never goes down with a cable, which makes it ideal for router identification."),
+  tk('Static route to Branch A LAN 10.1.0.0/24 via 192.168.100.114', ['ip route 10.1.0.0 255.255.255.0 192.168.100.114'], s => G.hasRoute(s, '10.1.0.0', '255.255.255.0', '192.168.100.114'), "The next hop must be the far end of the /30 link (.114), the only usable address on that subnet besides ours."),
+  tk('Static route to Branch B LAN 10.2.0.0/24 via 192.168.100.118', ['ip route 10.2.0.0 255.255.255.0 192.168.100.118'], s => G.hasRoute(s, '10.2.0.0', '255.255.255.0', '192.168.100.118'), "Same pattern for the second branch. Its next hop is .118, the other usable address in 192.168.100.116/30."),
+  tk('Default route via 192.168.100.114', ['ip route 0.0.0.0 0.0.0.0 192.168.100.114'], s => G.hasDefaultRoute(s, '192.168.100.114'), "Branch A is the hub that reaches the internet, so everything not matched by a more specific route goes there."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 117, title: 'Static Routing Essentials', difficulty: 'Easy', domain: 'IP Connectivity', est: 30,
+  scenario: 'R1 is the hub of a small network. It reaches R2 and R3 over point-to-point links and the internet over a serial link to the ISP. Build the connected networks, add static routes for the remote LANs, then make the design resilient with floating backups, a summary, and a host route. Static routing questions appear on nearly every CCNA exam.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2', 'Serial0/0/0'])
+}, [
+  'Links: R2 10.0.12.0/30 (R2 is .2), R3 10.0.13.0/30 (R3 is .2), ISP 203.0.113.0/30 (ISP is .1).',
+  'Remote LANs: 172.16.2.0/24 behind R2 and 172.16.3.0/24 behind R3. Each can also be reached through the other router as a backup.',
+  'Floating backups use administrative distance 150 so they only appear if the primary route disappears.'
+], [
+  tk('Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), "A clear name identifies the hub router in prompts and logs."),
+  tk('Gi0/0 is 10.0.12.1/30, described, and up', ['interface gi0/0', 'ip address 10.0.12.1 255.255.255.252', 'description TO-R2', 'no shutdown', 'exit'], s => G.hasIp(s, 'gi0/0', '10.0.12.1', '255.255.255.252') && G.descriptionSet(s, 'gi0/0') && G.isUp(s, 'gi0/0'), "A static route can only point at a next hop on a directly connected, working subnet, so the link has to be addressed and up first."),
+  tk('Gi0/1 is 10.0.13.1/30, described, and up', ['interface gi0/1', 'ip address 10.0.13.1 255.255.255.252', 'description TO-R3', 'no shutdown', 'exit'], s => G.hasIp(s, 'gi0/1', '10.0.13.1', '255.255.255.252') && G.descriptionSet(s, 'gi0/1') && G.isUp(s, 'gi0/1'), "The second neighbor link follows the same rule. Router interfaces are shut down until you issue no shutdown."),
+  tk('Gi0/2 is 192.168.1.1/24 and up', ['interface gi0/2', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/2', '192.168.1.1', '255.255.255.0'), "The local LAN is a directly connected network, so it needs no route. It does need an address and an up interface."),
+  tk('Se0/0/0 is 203.0.113.2/30 and up', ['interface se0/0/0', 'ip address 203.0.113.2 255.255.255.252', 'no shutdown', 'exit'], addrUp('se0/0/0', '203.0.113.2', '255.255.255.252'), "The link to the ISP is a /30. The ISP uses .1, which becomes the default route's next hop."),
+  tk('Static route to 172.16.2.0/24 via 10.0.12.2', ['ip route 172.16.2.0 255.255.255.0 10.0.12.2'], s => G.hasRoute(s, '172.16.2.0', '255.255.255.0', '10.0.12.2'), "A router only knows directly connected networks until told otherwise. The pattern is network, mask, next hop, with the next hop being the neighbor's address on the shared link."),
+  tk('Static route to 172.16.3.0/24 via 10.0.13.2', ['ip route 172.16.3.0 255.255.255.0 10.0.13.2'], s => G.hasRoute(s, '172.16.3.0', '255.255.255.0', '10.0.13.2'), "Each remote LAN lives behind a different neighbor, so the next hop is that neighbor's address, not an address inside the destination network."),
+  tk('Default route via 203.0.113.1', ['ip route 0.0.0.0 0.0.0.0 203.0.113.1'], s => G.hasDefaultRoute(s, '203.0.113.1'), "0.0.0.0/0 matches everything and is only used when nothing more specific matches. It is the gateway of last resort toward the ISP."),
+  tk('Floating route to 172.16.2.0/24 via 10.0.13.2, distance 150', ['ip route 172.16.2.0 255.255.255.0 10.0.13.2 150'], s => G.routeHasAd(s, '172.16.2.0', '255.255.255.0', '10.0.13.2', 150), "A static route has a default administrative distance of 1. Setting 150 makes this a floating static: invisible while the primary exists, active the moment it fails."),
+  tk('Floating route to 172.16.3.0/24 via 10.0.12.2, distance 150', ['ip route 172.16.3.0 255.255.255.0 10.0.12.2 150'], s => G.routeHasAd(s, '172.16.3.0', '255.255.255.0', '10.0.12.2', 150), "The mirror-image backup. If the R3 link fails, traffic for 172.16.3.0/24 can still arrive through R2."),
+  tk('Summary route 10.50.0.0/16 via 10.0.12.2', ['ip route 10.50.0.0 255.255.0.0 10.0.12.2'], s => G.hasRoute(s, '10.50.0.0', '255.255.0.0', '10.0.12.2'), "One summary route covers every network inside 10.50.0.0/16, keeping the routing table small instead of needing a route per subnet."),
+  tk('Host route 172.16.2.10/32 via 10.0.13.2', ['ip route 172.16.2.10 255.255.255.255 10.0.13.2'], s => G.hasRoute(s, '172.16.2.10', '255.255.255.255', '10.0.13.2'), "Routers use the longest matching prefix. This /32 beats the /24 route for that one server, sending it via R3 while the rest of the subnet uses R2."),
+  tk('DNS lookup of mistyped commands is disabled', ['no ip domain-lookup'], s => G.domainLookupDisabled(s), "Without this, a mistyped command is treated as a hostname and the console freezes while a DNS lookup times out."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 118, title: 'Single-Area OSPF Essentials', difficulty: 'Medium', domain: 'IP Connectivity', est: 30,
+  scenario: 'R1 connects two LANs and a core link to R2, all in OSPF Area 0. Address the interfaces, start OSPF with a fixed router-id, advertise each network with the correct wildcard mask, keep Hellos off the user LANs, steer traffic with cost, and secure the neighbor link.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2'])
+}, [
+  'Core link to R2: 10.0.0.0/30. LAN A: 192.168.10.0/24. LAN B: 192.168.20.0/24. Router identity: Loopback0 1.1.1.1/32.',
+  'All networks belong to OSPF process 1, Area 0. The router takes .1 in each subnet.',
+  'OSPF network statements use wildcard masks (the inverse of the subnet mask).'
+], [
+  tk('Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), "A clear name identifies the router in OSPF neighbor output and logs."),
+  tk('Gi0/0 (core link) is 10.0.0.1/30 and up', ['interface gi0/0', 'ip address 10.0.0.1 255.255.255.252', 'no shutdown', 'exit'], addrUp('gi0/0', '10.0.0.1', '255.255.255.252'), "OSPF only runs on interfaces that are up and addressed. The core link is a /30 point-to-point subnet."),
+  tk('Gi0/1 (LAN A) is 192.168.10.1/24 and up', ['interface gi0/1', 'ip address 192.168.10.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/1', '192.168.10.1', '255.255.255.0'), "The LAN interface is the gateway for LAN A and the network OSPF will advertise for it."),
+  tk('Gi0/2 (LAN B) is 192.168.20.1/24 and up', ['interface gi0/2', 'ip address 192.168.20.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/2', '192.168.20.1', '255.255.255.0'), "The same for LAN B. Each LAN is its own subnet and needs its own gateway interface."),
+  tk('Loopback0 is 1.1.1.1/32 and up', ['interface loopback0', 'ip address 1.1.1.1 255.255.255.255', 'no shutdown', 'exit'], addrUp('Loopback0', '1.1.1.1', '255.255.255.255'), "A loopback never goes down with a cable, which makes it a stable identity for the router."),
+  tk('OSPF process 1 runs with router-id 1.1.1.1', ['router ospf 1', 'router-id 1.1.1.1', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1'), "The router-id uniquely identifies this router in the OSPF domain. Setting it explicitly keeps it stable; otherwise IOS picks an address that can change."),
+  tk('10.0.0.0/30 is advertised into Area 0', ['router ospf 1', 'network 10.0.0.0 0.0.0.3 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.0.0', '0.0.0.3', 0), "Network statements use a wildcard mask, the inverse of the subnet mask: a /30 is 255.255.255.252, so the wildcard is 0.0.0.3. Matching interfaces join Area 0."),
+  tk('192.168.10.0/24 is advertised into Area 0', ['router ospf 1', 'network 192.168.10.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '192.168.10.0', '0.0.0.255', 0), "A /24 inverts to 0.0.0.255. This both enables OSPF on the interface and advertises the connected network to neighbors."),
+  tk('192.168.20.0/24 is advertised into Area 0', ['router ospf 1', 'network 192.168.20.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '192.168.20.0', '0.0.0.255', 0), "Every network needs its own matching statement. Configuring an address on an interface does not advertise it by itself."),
+  tk('Loopback 1.1.1.1 is advertised with a 0.0.0.0 wildcard', ['router ospf 1', 'network 1.1.1.1 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '1.1.1.1', '0.0.0.0', 0), "A loopback is one host, so the wildcard is 0.0.0.0 (match exactly). Advertising it gives the rest of the network a stable address for this router."),
+  tk('Gi0/1 and Gi0/2 are passive OSPF interfaces', ['router ospf 1', 'passive-interface gi0/1', 'passive-interface gi0/2', 'exit'], s => G.ospfPassiveOn(s, 'gi0/1') && G.ospfPassiveOn(s, 'gi0/2'), "LAN interfaces only have hosts on them. Passive still advertises the network but stops OSPF Hellos, saving overhead and blocking rogue OSPF neighbors."),
+  tk('Gi0/0 OSPF cost is 10', ['interface gi0/0', 'ip ospf cost 10', 'exit'], s => G.ospfCostIs(s, 'gi0/0', 10), "OSPF picks the lowest total cost. Setting the cost manually lets you steer traffic toward the link you prefer."),
+  tk('Gi0/0 has OSPF authentication with key CcnaKey1', ['interface gi0/0', 'ip ospf authentication', 'ip ospf authentication-key CcnaKey1', 'exit'], s => G.ospfAuthConfigured(s, 'gi0/0', 'CcnaKey1'), "Authentication stops a rogue or misconfigured router from forming a neighbor relationship and injecting routes. Both ends must use the same key, and the enabling command is separate from the key."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 119, title: 'EIGRP Essentials', difficulty: 'Medium', domain: 'IP Connectivity', est: 25,
+  scenario: 'R1 runs EIGRP AS 100 toward R2 and has two user LANs. It also has a serial link to the ISP, and its default route must be shared with the rest of the EIGRP network. Configure the interfaces, enable EIGRP with the right network statements, turn off auto-summary, and redistribute the default route.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2', 'Serial0/0/0'])
+}, [
+  'Link to R2: 10.1.1.0/30 (R1 is .1). LANs: 192.168.1.0/24 and 192.168.2.0/24 (R1 is .1). ISP link: 203.0.113.0/30 (R1 is .2, ISP is .1).',
+  'EIGRP autonomous system number: 100.',
+  'EIGRP network statements can take a wildcard mask to match only the intended subnet.'
+], [
+  tk('Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), "A clear name identifies the router in EIGRP neighbor tables."),
+  tk('Gi0/0 (link to R2) is 10.1.1.1/30 and up', ['interface gi0/0', 'ip address 10.1.1.1 255.255.255.252', 'no shutdown', 'exit'], addrUp('gi0/0', '10.1.1.1', '255.255.255.252'), "EIGRP neighbors need a working shared subnet. The /30 holds exactly the two routers."),
+  tk('Gi0/1 (LAN 1) is 192.168.1.1/24 and up', ['interface gi0/1', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/1', '192.168.1.1', '255.255.255.0'), "The user LAN gateway, and a network EIGRP will advertise."),
+  tk('Gi0/2 (LAN 2) is 192.168.2.1/24 and up', ['interface gi0/2', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/2', '192.168.2.1', '255.255.255.0'), "The second user LAN needs its own subnet and gateway."),
+  tk('Se0/0/0 (ISP link) is 203.0.113.2/30 and up', ['interface se0/0/0', 'ip address 203.0.113.2 255.255.255.252', 'no shutdown', 'exit'], addrUp('se0/0/0', '203.0.113.2', '255.255.255.252'), "The WAN link to the ISP. It is not part of EIGRP, but it is the path the default route will use."),
+  tk('EIGRP AS 100 is running', ['router eigrp 100', 'exit'], s => G.eigrpEnabled(s, 100), "The AS number must match on every router that should become EIGRP neighbors; a mismatch silently prevents adjacency."),
+  tk('10.1.1.0 (0.0.0.3) is advertised in EIGRP', ['router eigrp 100', 'network 10.1.1.0 0.0.0.3', 'exit'], s => G.eigrpAdvertisesNetwork(s, '10.1.1.0'), "A network statement enables EIGRP on matching interfaces and advertises that network. The wildcard limits it to exactly this /30."),
+  tk('192.168.1.0 (0.0.0.255) is advertised in EIGRP', ['router eigrp 100', 'network 192.168.1.0 0.0.0.255', 'exit'], s => G.eigrpAdvertisesNetwork(s, '192.168.1.0'), "Without a matching statement the LAN exists locally but no other EIGRP router ever learns about it."),
+  tk('192.168.2.0 (0.0.0.255) is advertised in EIGRP', ['router eigrp 100', 'network 192.168.2.0 0.0.0.255', 'exit'], s => G.eigrpAdvertisesNetwork(s, '192.168.2.0'), "Each network needs its own statement. Forgetting one is a very common reason a subnet is missing from other routers."),
+  tk('EIGRP auto-summary is disabled', ['router eigrp 100', 'no auto-summary', 'exit'], s => G.eigrpNoAutoSummary(s), "Auto-summary collapses subnets to their classful boundary at network edges, which breaks discontiguous networks. It is turned off in virtually every modern design."),
+  tk('Default route via 203.0.113.1 is redistributed into EIGRP', ['ip route 0.0.0.0 0.0.0.0 203.0.113.1', 'router eigrp 100', 'redistribute static', 'exit'], s => G.hasDefaultRoute(s, '203.0.113.1') && G.eigrpRedistributes(s, 'static'), "A static default route is not part of EIGRP, so other routers never learn it. Redistributing static routes shares it so the whole network can reach the ISP.")
+]),
+
+buildLab({
+  id: 120, title: 'VLAN Essentials', difficulty: 'Easy', domain: 'Network Access', est: 30,
+  scenario: 'A new access switch needs the standard VLAN build: create and name the VLANs, place each port in the right one, park unused ports safely, build the trunk to the distribution layer, and give the switch a management address so it can be reached remotely.',
+  initial: () => switchState('Switch', ['FastEthernet0/1', 'FastEthernet0/2', 'FastEthernet0/3', 'FastEthernet0/4', 'FastEthernet0/5', 'FastEthernet0/6', 'FastEthernet0/7', 'FastEthernet0/8', 'GigabitEthernet0/1'])
+}, [
+  'VLANs: 10 SALES, 20 ENGINEERING, 30 HR, 40 GUEST, 99 NATIVE, 100 MGMT.',
+  'Ports: Fa0/1-2 Sales, Fa0/3-4 Engineering, Fa0/5 HR, Fa0/6 Guest, Fa0/7-8 unused. Gi0/1 is the uplink trunk.',
+  'Management: VLAN 100, switch address 192.168.100.5/24, gateway 192.168.100.1.'
+], [
+  tk('Hostname is SW1', ['hostname SW1'], s => G.hostnameIs(s, 'SW1'), "A clear name tells you which closet switch you are logged into."),
+  tk('VLANs 10 SALES, 20 ENGINEERING, 30 HR, 40 GUEST exist', ['vlan 10', 'name SALES', 'exit', 'vlan 20', 'name ENGINEERING', 'exit', 'vlan 30', 'name HR', 'exit', 'vlan 40', 'name GUEST', 'exit'], s => G.vlanExists(s, 10, 'SALES') && G.vlanExists(s, 20, 'ENGINEERING') && G.vlanExists(s, 30, 'HR') && G.vlanExists(s, 40, 'GUEST'), "A VLAN has to exist in the database before ports can be placed in it, and names make show vlan brief readable."),
+  tk('VLANs 99 NATIVE and 100 MGMT exist', ['vlan 99', 'name NATIVE', 'exit', 'vlan 100', 'name MGMT', 'exit'], s => G.vlanExists(s, 99, 'NATIVE') && G.vlanExists(s, 100, 'MGMT'), "The native VLAN and the management VLAN are kept separate from user VLANs as a security practice."),
+  tk('Fa0/1 and Fa0/2 are access ports in VLAN 10', ['interface fa0/1', 'switchport mode access', 'switchport access vlan 10', 'exit', 'interface fa0/2', 'switchport mode access', 'switchport access vlan 10', 'exit'], s => G.accessVlanIs(s, 'fa0/1', 10) && G.accessVlanIs(s, 'fa0/2', 10), "An access port carries one VLAN. Left unassigned it falls into VLAN 1, which puts the user on the wrong network."),
+  tk('Fa0/3 and Fa0/4 are access ports in VLAN 20', ['interface fa0/3', 'switchport mode access', 'switchport access vlan 20', 'exit', 'interface fa0/4', 'switchport mode access', 'switchport access vlan 20', 'exit'], s => G.accessVlanIs(s, 'fa0/3', 20) && G.accessVlanIs(s, 'fa0/4', 20), "Each department gets its own broadcast domain, so ports are assigned per VLAN."),
+  tk('Fa0/5 is an access port in VLAN 30', ['interface fa0/5', 'switchport mode access', 'switchport access vlan 30', 'exit'], s => G.accessVlanIs(s, 'fa0/5', 30), "HR traffic stays isolated from other departments at Layer 2."),
+  tk('Fa0/6 is an access port in VLAN 40', ['interface fa0/6', 'switchport mode access', 'switchport access vlan 40', 'exit'], s => G.accessVlanIs(s, 'fa0/6', 40), "Guest devices belong in their own VLAN so they cannot reach internal resources."),
+  tk('Fa0/7 and Fa0/8 are parked in VLAN 999 and shut down', ['interface fa0/7', 'switchport mode access', 'switchport access vlan 999', 'shutdown', 'exit', 'interface fa0/8', 'switchport mode access', 'switchport access vlan 999', 'shutdown', 'exit'], s => ['fa0/7', 'fa0/8'].every(p => { const i = G.iface(s, p); return !!i && i.shutdown === true && G.accessVlanIs(s, p, 999); }), "Unused ports are an open door. Parking them in an unused VLAN and shutting them down means a stranger who plugs in gets nothing."),
+  tk('Gi0/1 is a trunk', ['interface gi0/1', 'switchport mode trunk', 'exit'], s => G.isTrunk(s, 'gi0/1'), "A trunk carries several VLANs over one link by tagging frames with 802.1Q. An access port could only carry one VLAN across."),
+  tk('Gi0/1 native VLAN is 99', ['interface gi0/1', 'switchport trunk native vlan 99', 'exit'], s => G.nativeVlanIs(s, 'gi0/1', 99), "The native VLAN carries untagged traffic. Moving it off VLAN 1 reduces VLAN-hopping risk, and both ends of the trunk must agree."),
+  tk('Gi0/1 allows only VLANs 10, 20, 30, 40, 99, 100', ['interface gi0/1', 'switchport trunk allowed vlan 10,20,30,40,99,100', 'exit'], s => [10, 20, 30, 40, 99, 100].every(v => G.trunkAllows(s, 'gi0/1', v)), "A trunk allows every VLAN by default. Restricting it to the VLANs actually in use limits unnecessary traffic and exposure."),
+  tk('Vlan100 is 192.168.100.5/24 and up', ['interface vlan 100', 'ip address 192.168.100.5 255.255.255.0', 'no shutdown', 'exit'], addrUp('Vlan100', '192.168.100.5', '255.255.255.0'), "A Layer 2 switch only needs an IP address on a management SVI so it can be reached by SSH or SNMP. SVIs are shut down until enabled."),
+  tk('Default gateway is 192.168.100.1', ['ip default-gateway 192.168.100.1'], s => G.defaultGatewayIs(s, '192.168.100.1'), "A Layer 2 switch has no routing table, so ip default-gateway (not ip route) is how its own management traffic reaches other subnets. A frequent exam trap."),
+  tk('Console has a password and requires login', ['line console 0', 'password Cisco@123', 'login', 'exit'], s => G.consolePasswordSet(s) && s.lines.console.login !== 'none', "A console password does nothing until the separate login command tells the line to demand it."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+])
+);
+
+LABS.push(
+buildLab({
+  id: 121, title: 'Complete Access Switch Capstone', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 45,
+  scenario: 'This is the full access-layer build in one pass: secure management over SSH, VLANs and management addressing, user, phone, and server ports, port security, PortFast and BPDU Guard, an unused port, an EtherChannel to a peer switch, a hardened uplink trunk, and Rapid PVST+. If you can do this one from memory, the switching half of the exam is in good shape.',
+  initial: () => switchState('Switch', ['FastEthernet0/1', 'FastEthernet0/2', 'FastEthernet0/3', 'FastEthernet0/4', 'FastEthernet0/7', 'FastEthernet0/8', 'FastEthernet0/24', 'GigabitEthernet0/1', 'Port-channel1'])
+}, [
+  'VLANs: 10 USERS, 20 SERVERS, 50 VOICE, 99 MGMT. Management SVI: Vlan99 at 192.168.99.5/24, gateway 192.168.99.1.',
+  'Ports: Fa0/1-2 users (VLAN 10), Fa0/3 user plus phone (VLAN 10, voice 50), Fa0/4 server (VLAN 20), Fa0/7-8 EtherChannel to the peer, Fa0/24 unused, Gi0/1 uplink.',
+  'Management must use SSH with local accounts. All trunks use native VLAN 99 and carry only VLANs 10, 20, 50, 99.'
+], [
+  tk('Hostname is CAPSW1', ['hostname CAPSW1'], s => G.hostnameIs(s, 'CAPSW1'), "Set the name first. It also becomes part of the RSA key name used for SSH later."),
+  tk('Enable secret is set and password encryption is on', ['enable secret Cisco123!', 'service password-encryption'], s => G.enableSecretSet(s) && s.servicePasswordEncryption === true, "The secret hashes the privileged password, and password encryption obscures any remaining plain-text line passwords in the configuration."),
+  tk('MOTD banner contains "Unauthorized"', ['banner motd #Unauthorized access is prohibited#'], s => G.bannerContains(s, 'unauthorized'), "The legal warning shown before login. It is a baseline security control the exam expects."),
+  tk('Console has a password and requires login', ['line console 0', 'password Cisco@123', 'login', 'exit'], s => G.consolePasswordSet(s) && s.lines.console.login !== 'none', "The password stores the secret and login makes the line actually ask for it. Both are required."),
+  tk('Local user admin exists (privilege 15, with a secret)', ['username admin privilege 15 secret AdminPass1'], s => G.userExists(s, 'admin', { privilege: 15, hasSecret: true }), "Individual accounts give accountability that a shared line password never can, and VTY login local checks this database."),
+  tk('Domain name lab.local is set and RSA keys are generated', ['ip domain-name lab.local', 'crypto key generate rsa'], s => G.domainNameIs(s, 'lab.local') && G.cryptoKeyGenerated(s), "SSH needs a key pair, and IOS will not generate one until a domain name is set. That order is a favorite exam detail."),
+  tk('VTY requires local login and allows SSH only', ['line vty 0 4', 'login local', 'transport input ssh', 'exit'], s => G.vtyLoginLocal(s) && G.vtyTransportIs(s, ['ssh']), "Telnet sends passwords in cleartext. SSH-only with local accounts is the standard secure-management baseline."),
+  tk('VLANs 10, 20, 50, 99 exist with names', ['vlan 10', 'name USERS', 'exit', 'vlan 20', 'name SERVERS', 'exit', 'vlan 50', 'name VOICE', 'exit', 'vlan 99', 'name MGMT', 'exit'], s => G.vlanExists(s, 10, 'USERS') && G.vlanExists(s, 20, 'SERVERS') && G.vlanExists(s, 50, 'VOICE') && G.vlanExists(s, 99, 'MGMT'), "VLANs must exist before ports and trunks can use them. Names make the output readable."),
+  tk('Vlan99 is 192.168.99.5/24 and up', ['interface vlan 99', 'ip address 192.168.99.5 255.255.255.0', 'no shutdown', 'exit'], addrUp('Vlan99', '192.168.99.5', '255.255.255.0'), "The management SVI gives the Layer 2 switch an address to be reached on. SVIs are shut down until enabled."),
+  tk('Default gateway is 192.168.99.1', ['ip default-gateway 192.168.99.1'], s => G.defaultGatewayIs(s, '192.168.99.1'), "A Layer 2 switch has no routing table, so ip default-gateway lets its management traffic leave the subnet."),
+  tk('Fa0/1 and Fa0/2 are access ports in VLAN 10', ['interface fa0/1', 'switchport mode access', 'switchport access vlan 10', 'exit', 'interface fa0/2', 'switchport mode access', 'switchport access vlan 10', 'exit'], s => G.accessVlanIs(s, 'fa0/1', 10) && G.accessVlanIs(s, 'fa0/2', 10), "Access ports carry a single VLAN. Unassigned ports default to VLAN 1."),
+  tk('Fa0/3 is access VLAN 10 with voice VLAN 50', ['interface fa0/3', 'switchport mode access', 'switchport access vlan 10', 'switchport voice vlan 50', 'exit'], s => G.accessVlanIs(s, 'fa0/3', 10) && G.voiceVlanIs(s, 'fa0/3', 50), "The access VLAN carries the PC and the voice VLAN carries the phone. Voice gets its own VLAN so it can be prioritized."),
+  tk('Fa0/4 is an access port in VLAN 20', ['interface fa0/4', 'switchport mode access', 'switchport access vlan 20', 'exit'], s => G.accessVlanIs(s, 'fa0/4', 20), "Servers live in their own VLAN so access to them can be controlled separately."),
+  tk('Fa0/1 and Fa0/2 have port security (max 1, sticky, shutdown)', ['interface fa0/1', 'switchport port-security', 'switchport port-security maximum 1', 'switchport port-security mac-address sticky', 'switchport port-security violation shutdown', 'exit', 'interface fa0/2', 'switchport port-security', 'switchport port-security maximum 1', 'switchport port-security mac-address sticky', 'switchport port-security violation shutdown', 'exit'], s => ['fa0/1', 'fa0/2'].every(p => G.portSecurityMax(s, p, 1) && G.portSecurityStickyMac(s, p) && G.portSecurityViolation(s, p, 'shutdown')), "Limiting a port to one sticky MAC means an unauthorized device or unmanaged switch triggers the violation action instead of joining the network."),
+  tk('Fa0/1 to Fa0/4 have PortFast and BPDU Guard', ['interface fa0/1', 'spanning-tree portfast', 'spanning-tree bpduguard enable', 'exit', 'interface fa0/2', 'spanning-tree portfast', 'spanning-tree bpduguard enable', 'exit', 'interface fa0/3', 'spanning-tree portfast', 'spanning-tree bpduguard enable', 'exit', 'interface fa0/4', 'spanning-tree portfast', 'spanning-tree bpduguard enable', 'exit'], s => ['fa0/1', 'fa0/2', 'fa0/3', 'fa0/4'].every(p => G.portfastEnabled(s, p) && G.bpduguardEnabled(s, p)), "PortFast skips the STP listening and learning delay on end-device ports. BPDU Guard shuts the port if a switch is ever plugged in, preventing a loop."),
+  tk('Fa0/24 is parked in VLAN 999 and shut down', ['interface fa0/24', 'switchport mode access', 'switchport access vlan 999', 'shutdown', 'exit'], s => { const i = G.iface(s, 'fa0/24'); return !!i && i.shutdown === true && G.accessVlanIs(s, 'fa0/24', 999); }, "An unused port is an open door. Parking it in an unused VLAN and shutting it down gives a stranger nothing to connect to."),
+  tk('Fa0/7 and Fa0/8 are in channel-group 1, LACP active', ['interface fa0/7', 'channel-group 1 mode active', 'exit', 'interface fa0/8', 'channel-group 1 mode active', 'exit'], s => G.channelGroupIs(s, 'fa0/7', 1, 'active') && G.channelGroupIs(s, 'fa0/8', 1, 'active'), "Both members must use the same group number. Bundling makes STP see one logical link, so no bandwidth is wasted on a blocked port."),
+  tk('Port-channel1 is a trunk (native 99, allows 10, 20, 50, 99)', ['interface port-channel 1', 'switchport mode trunk', 'switchport trunk native vlan 99', 'switchport trunk allowed vlan 10,20,50,99', 'exit'], s => G.isTrunk(s, 'Port-channel1') && G.nativeVlanIs(s, 'Port-channel1', 99) && [10, 20, 50, 99].every(v => G.trunkAllows(s, 'Port-channel1', v)), "After bundling, trunk settings belong on the logical Port-channel interface, not on its member ports."),
+  tk('Gi0/1 is a trunk (native 99, allows 10, 20, 50, 99) with CDP off', ['interface gi0/1', 'switchport mode trunk', 'switchport trunk native vlan 99', 'switchport trunk allowed vlan 10,20,50,99', 'no cdp enable', 'exit'], s => G.isTrunk(s, 'gi0/1') && G.nativeVlanIs(s, 'gi0/1', 99) && [10, 20, 50, 99].every(v => G.trunkAllows(s, 'gi0/1', v)) && G.cdpDisabledOn(s, 'gi0/1'), "The uplink follows the same native VLAN standard, carries only needed VLANs, and has CDP off because CDP advertises device details in clear text."),
+  tk('Rapid PVST+ is on and this switch is root primary for VLAN 10', ['spanning-tree mode rapid-pvst', 'spanning-tree vlan 10 root primary'], s => G.stpModeIs(s, 'rapid-pvst') && G.stpRootRoleIs(s, 10, 'primary'), "Rapid PVST+ converges in seconds instead of 30 to 50. Left alone, the root is whichever switch has the lowest MAC, so set it deliberately.")
+]),
+
+buildLab({
+  id: 122, title: 'Router-on-a-Stick Essentials', difficulty: 'Medium', domain: 'Network Access', est: 30,
+  scenario: 'One trunk link carries three user VLANs and a native management VLAN to the router. Build a subinterface for each, with the native VLAN handled correctly, then give each VLAN its own DHCP pool, connect the WAN, and finish the baseline.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1'])
+}, [
+  'VLANs: 10 SALES 192.168.10.0/24, 20 ENGINEERING 192.168.20.0/24, 30 GUEST 192.168.30.0/24, 99 native 192.168.99.0/24. The router is .1 in each.',
+  'Guest uses DNS 1.1.1.1; the other pools use 8.8.8.8. Exclude .1 through .10 in each user subnet.',
+  'WAN: Gi0/1 203.0.113.2/30, ISP at 203.0.113.1.'
+], [
+  tk('Hostname is RTR1', ['hostname RTR1'], s => G.hostnameIs(s, 'RTR1'), "A clear name identifies the router before anything else is configured."),
+  tk('Physical Gi0/0 is up', ['interface gi0/0', 'no shutdown', 'exit'], s => G.isUp(s, 'gi0/0'), "Subinterfaces inherit state from the physical interface. If it stays shut down, no VLAN passes traffic however correct the subinterfaces are."),
+  tk('Gi0/0.10 is VLAN 10, 192.168.10.1/24, described', ['interface gi0/0.10', 'encapsulation dot1Q 10', 'ip address 192.168.10.1 255.255.255.0', 'description SALES', 'exit'], s => G.encapsulationIs(s, 'gi0/0.10', 10) && G.hasIp(s, 'gi0/0.10', '192.168.10.1', '255.255.255.0') && G.descriptionSet(s, 'gi0/0.10'), "The encapsulation tag tells the router which VLAN this subinterface serves. The address becomes the default gateway for hosts in that VLAN."),
+  tk('Gi0/0.20 is VLAN 20, 192.168.20.1/24, described', ['interface gi0/0.20', 'encapsulation dot1Q 20', 'ip address 192.168.20.1 255.255.255.0', 'description ENGINEERING', 'exit'], s => G.encapsulationIs(s, 'gi0/0.20', 20) && G.hasIp(s, 'gi0/0.20', '192.168.20.1', '255.255.255.0') && G.descriptionSet(s, 'gi0/0.20'), "Each VLAN is a separate subnet and needs its own subinterface. Matching the tag to the VLAN ID is the most tested detail."),
+  tk('Gi0/0.30 is VLAN 30, 192.168.30.1/24, described', ['interface gi0/0.30', 'encapsulation dot1Q 30', 'ip address 192.168.30.1 255.255.255.0', 'description GUEST', 'exit'], s => G.encapsulationIs(s, 'gi0/0.30', 30) && G.hasIp(s, 'gi0/0.30', '192.168.30.1', '255.255.255.0') && G.descriptionSet(s, 'gi0/0.30'), "A third VLAN follows the same pattern. Subinterface numbers are only labels; the dot1Q number is what matters."),
+  tk('Gi0/0.99 is the native VLAN 99, 192.168.99.1/24', ['interface gi0/0.99', 'encapsulation dot1Q 99 native', 'ip address 192.168.99.1 255.255.255.0', 'exit'], s => { const i = G.iface(s, 'gi0/0.99'); return !!i && !!i.encapsulation && String(i.encapsulation.vlan) === '99' && i.encapsulation.native === true && G.hasIp(s, 'gi0/0.99', '192.168.99.1', '255.255.255.0'); }, "Native VLAN traffic is untagged, so the router must be told which subinterface receives it with the native keyword. A mismatch with the switch's native VLAN is a classic fault."),
+  tk('Gi0/1 (WAN) is 203.0.113.2/30 and up', ['interface gi0/1', 'ip address 203.0.113.2 255.255.255.252', 'no shutdown', 'exit'], addrUp('gi0/1', '203.0.113.2', '255.255.255.252'), "The uplink to the ISP is a separate routed interface that must be addressed and brought up."),
+  tk('Default route via 203.0.113.1', ['ip route 0.0.0.0 0.0.0.0 203.0.113.1'], s => G.hasDefaultRoute(s, '203.0.113.1'), "All VLANs can reach each other through the router, but internet traffic needs a gateway of last resort."),
+  tk('.1 through .10 are excluded in all three user subnets', ['ip dhcp excluded-address 192.168.10.1 192.168.10.10', 'ip dhcp excluded-address 192.168.20.1 192.168.20.10', 'ip dhcp excluded-address 192.168.30.1 192.168.30.10'], s => G.hasDhcpExclusion(s, '192.168.10.1', '192.168.10.10') && G.hasDhcpExclusion(s, '192.168.20.1', '192.168.20.10') && G.hasDhcpExclusion(s, '192.168.30.1', '192.168.30.10'), "The gateway addresses sit in these ranges. Excluding them stops DHCP from ever leasing the router's own address to a client."),
+  tk('Pool SALES: network, gateway, DNS 8.8.8.8', ['ip dhcp pool SALES', 'network 192.168.10.0 255.255.255.0', 'default-router 192.168.10.1', 'dns-server 8.8.8.8', 'exit'], s => G.dhcpPoolNetwork(s, 'SALES', '192.168.10.0', '255.255.255.0') && G.dhcpPoolDefaultRouter(s, 'SALES', '192.168.10.1') && G.dhcpPoolDnsServer(s, 'SALES', '8.8.8.8'), "One pool per subnet. The gateway handed out must be the subinterface address for that exact VLAN, and DNS lets clients resolve names."),
+  tk('Pool ENGINEERING: network, gateway, DNS 8.8.8.8', ['ip dhcp pool ENGINEERING', 'network 192.168.20.0 255.255.255.0', 'default-router 192.168.20.1', 'dns-server 8.8.8.8', 'exit'], s => G.dhcpPoolNetwork(s, 'ENGINEERING', '192.168.20.0', '255.255.255.0') && G.dhcpPoolDefaultRouter(s, 'ENGINEERING', '192.168.20.1') && G.dhcpPoolDnsServer(s, 'ENGINEERING', '8.8.8.8'), "A common mistake is copying the first pool and forgetting to change the gateway for the second VLAN."),
+  tk('Pool GUEST: network, gateway, DNS 1.1.1.1', ['ip dhcp pool GUEST', 'network 192.168.30.0 255.255.255.0', 'default-router 192.168.30.1', 'dns-server 1.1.1.1', 'exit'], s => G.dhcpPoolNetwork(s, 'GUEST', '192.168.30.0', '255.255.255.0') && G.dhcpPoolDefaultRouter(s, 'GUEST', '192.168.30.1') && G.dhcpPoolDnsServer(s, 'GUEST', '1.1.1.1'), "Pools can hand out different options. Guests often get a public DNS server instead of the internal one."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 123, title: 'DHCP Server Essentials', difficulty: 'Medium', domain: 'IP Services', est: 35,
+  scenario: 'One router is the DHCP server for three LANs. For each LAN you must address the gateway interface, reserve the addresses used by infrastructure, and build a pool with the correct network, gateway, and DNS. DHCP is one of the most dependable topics on the exam, so practice getting every piece right.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2'])
+}, [
+  'LANs: SALES 192.168.10.0/24 (Gi0/0), ENGINEERING 192.168.20.0/24 (Gi0/1), GUEST 192.168.30.0/24 (Gi0/2). The router is .1 in each.',
+  'Reserve .1 through .20 in SALES (and .250 for the printer), and .1 through .10 in the other two.',
+  'SALES and ENGINEERING use DNS 8.8.8.8. GUEST uses DNS 1.1.1.1.'
+], [
+  tk('Hostname is DHCP1', ['hostname DHCP1'], s => G.hostnameIs(s, 'DHCP1'), "A clear name identifies the server in prompts and logs."),
+  tk('Gi0/0 is 192.168.10.1/24 and up', ['interface gi0/0', 'ip address 192.168.10.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/0', '192.168.10.1', '255.255.255.0'), "The server answers clients on a network it has an interface in. This address is also the gateway clients will be given."),
+  tk('Gi0/1 is 192.168.20.1/24 and up', ['interface gi0/1', 'ip address 192.168.20.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/1', '192.168.20.1', '255.255.255.0'), "Each LAN needs its own gateway interface that is addressed and up."),
+  tk('Gi0/2 is 192.168.30.1/24 and up', ['interface gi0/2', 'ip address 192.168.30.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/2', '192.168.30.1', '255.255.255.0'), "The guest LAN is a separate subnet with its own interface."),
+  tk('SALES: .1 through .20 are excluded', ['ip dhcp excluded-address 192.168.10.1 192.168.10.20'], s => G.hasDhcpExclusion(s, '192.168.10.1', '192.168.10.20'), "Addresses used by the router and static devices must be excluded. DHCP cannot know they are taken and would eventually lease one, causing an address conflict."),
+  tk('SALES: 192.168.10.250 (printer) is excluded', ['ip dhcp excluded-address 192.168.10.250'], s => G.hasDhcpExclusion(s, '192.168.10.250', '192.168.10.250'), "A single reserved address uses the same command with just one address. Exclusions are global, so they are configured outside the pool."),
+  tk('ENGINEERING: .1 through .10 are excluded', ['ip dhcp excluded-address 192.168.20.1 192.168.20.10'], s => G.hasDhcpExclusion(s, '192.168.20.1', '192.168.20.10'), "The gateway and infrastructure range for this subnet."),
+  tk('GUEST: .1 through .10 are excluded', ['ip dhcp excluded-address 192.168.30.1 192.168.30.10'], s => G.hasDhcpExclusion(s, '192.168.30.1', '192.168.30.10'), "Even the guest subnet needs the router's own address protected from being leased out."),
+  tk('Pool SALES covers 192.168.10.0/24', ['ip dhcp pool SALES', 'network 192.168.10.0 255.255.255.0', 'exit'], s => G.dhcpPoolNetwork(s, 'SALES', '192.168.10.0', '255.255.255.0'), "The network statement defines the range the server may lease from. Without it the pool exists but has no addresses to hand out."),
+  tk('Pool SALES default router is 192.168.10.1', ['ip dhcp pool SALES', 'default-router 192.168.10.1', 'exit'], s => G.dhcpPoolDefaultRouter(s, 'SALES', '192.168.10.1'), "Clients take this as their default gateway. Without it they reach their own subnet but nothing beyond, which looks like no internet."),
+  tk('Pool SALES DNS server is 8.8.8.8', ['ip dhcp pool SALES', 'dns-server 8.8.8.8', 'exit'], s => G.dhcpPoolDnsServer(s, 'SALES', '8.8.8.8'), "Without a DNS server, clients reach IP addresses but cannot resolve names, which users report as the internet being down."),
+  tk('Pool ENGINEERING covers 192.168.20.0/24', ['ip dhcp pool ENGINEERING', 'network 192.168.20.0 255.255.255.0', 'exit'], s => G.dhcpPoolNetwork(s, 'ENGINEERING', '192.168.20.0', '255.255.255.0'), "Every subnet needs its own pool. A client only gets an address from the pool matching the subnet it asked from."),
+  tk('Pool ENGINEERING default router is 192.168.20.1', ['ip dhcp pool ENGINEERING', 'default-router 192.168.20.1', 'exit'], s => G.dhcpPoolDefaultRouter(s, 'ENGINEERING', '192.168.20.1'), "The gateway is different for each pool. Copying the first pool without changing it breaks the second LAN."),
+  tk('Pool ENGINEERING DNS server is 8.8.8.8', ['ip dhcp pool ENGINEERING', 'dns-server 8.8.8.8', 'exit'], s => G.dhcpPoolDnsServer(s, 'ENGINEERING', '8.8.8.8'), "DNS is a per-pool option, so every pool needs it."),
+  tk('Pool GUEST covers 192.168.30.0/24', ['ip dhcp pool GUEST', 'network 192.168.30.0 255.255.255.0', 'exit'], s => G.dhcpPoolNetwork(s, 'GUEST', '192.168.30.0', '255.255.255.0'), "Pool names are only labels. The network statement is what ties the pool to a subnet."),
+  tk('Pool GUEST default router is 192.168.30.1', ['ip dhcp pool GUEST', 'default-router 192.168.30.1', 'exit'], s => G.dhcpPoolDefaultRouter(s, 'GUEST', '192.168.30.1'), "Guests still need a gateway to reach the internet."),
+  tk('Pool GUEST DNS server is 1.1.1.1', ['ip dhcp pool GUEST', 'dns-server 1.1.1.1', 'exit'], s => G.dhcpPoolDnsServer(s, 'GUEST', '1.1.1.1'), "Guests are given a public DNS server so they never need to query internal name servers."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 124, title: 'DHCP Snooping Essentials', difficulty: 'Medium', domain: 'Security Fundamentals', est: 25,
+  scenario: 'Anyone can plug a rogue DHCP server into an access port and hand clients a malicious gateway. Enable DHCP snooping on the access switch so only the uplinks toward the real DHCP infrastructure are trusted, then add port security on the user ports.',
+  initial: () => switchState('Switch', ['FastEthernet0/1', 'FastEthernet0/2', 'FastEthernet0/3', 'GigabitEthernet0/1', 'GigabitEthernet0/2'])
+}, [
+  'VLANs: 10 USERS, 20 PHONES, 30 GUEST. Ports: Fa0/1 VLAN 10, Fa0/2 VLAN 20, Fa0/3 VLAN 30.',
+  'Gi0/1 and Gi0/2 are uplinks toward the real DHCP server and must be trusted. Every other port stays untrusted.',
+  'User ports use port security: maximum 1, sticky, violation restrict.'
+], [
+  tk('Hostname is SNOOP1', ['hostname SNOOP1'], s => G.hostnameIs(s, 'SNOOP1'), "A clear name identifies the switch in logs when snooping reports a violation."),
+  tk('VLANs 10 USERS, 20 PHONES, 30 GUEST exist', ['vlan 10', 'name USERS', 'exit', 'vlan 20', 'name PHONES', 'exit', 'vlan 30', 'name GUEST', 'exit'], s => G.vlanExists(s, 10, 'USERS') && G.vlanExists(s, 20, 'PHONES') && G.vlanExists(s, 30, 'GUEST'), "Snooping is enabled per VLAN, so the VLANs need to exist first."),
+  tk('DHCP snooping is enabled globally', ['ip dhcp snooping'], s => G.dhcpSnoopingEnabled(s), "This global command turns the feature on. The per-VLAN commands alone do nothing until it is enabled."),
+  tk('DHCP snooping is active on VLAN 10', ['ip dhcp snooping vlan 10'], s => G.dhcpSnoopingOnVlan(s, 10), "The vlan command chooses where the switch inspects DHCP messages. A VLAN left out is completely unprotected."),
+  tk('DHCP snooping is active on VLANs 20 and 30', ['ip dhcp snooping vlan 20,30'], s => G.dhcpSnoopingOnVlan(s, 20) && G.dhcpSnoopingOnVlan(s, 30), "A comma-separated list covers several VLANs in one command."),
+  tk('Gi0/1 is a trusted DHCP snooping port', ['interface gi0/1', 'ip dhcp snooping trust', 'exit'], s => G.dhcpSnoopingTrusted(s, 'gi0/1'), "Once snooping is on, every port is untrusted by default, including the uplink toward the real DHCP server. Trust only that uplink so legitimate replies are allowed from there."),
+  tk('Gi0/2 is a trusted DHCP snooping port', ['interface gi0/2', 'ip dhcp snooping trust', 'exit'], s => G.dhcpSnoopingTrusted(s, 'gi0/2'), "A second uplink toward the DHCP infrastructure also has to be trusted or replies arriving on it would be dropped."),
+  tk('Gi0/1 and Gi0/2 are trunks', ['interface gi0/1', 'switchport mode trunk', 'exit', 'interface gi0/2', 'switchport mode trunk', 'exit'], s => G.isTrunk(s, 'gi0/1') && G.isTrunk(s, 'gi0/2'), "The uplinks carry all the user VLANs toward the distribution layer."),
+  tk('Fa0/1 is an access port in VLAN 10', ['interface fa0/1', 'switchport mode access', 'switchport access vlan 10', 'exit'], s => G.accessVlanIs(s, 'fa0/1', 10), "User ports stay untrusted, so a rogue DHCP server plugged in here has its replies dropped."),
+  tk('Fa0/2 is an access port in VLAN 20', ['interface fa0/2', 'switchport mode access', 'switchport access vlan 20', 'exit'], s => G.accessVlanIs(s, 'fa0/2', 20), "Phones get their own VLAN and snooping applies to it as well."),
+  tk('Fa0/3 is an access port in VLAN 30', ['interface fa0/3', 'switchport mode access', 'switchport access vlan 30', 'exit'], s => G.accessVlanIs(s, 'fa0/3', 30), "Guest ports are the most likely place for a rogue device, so keeping them untrusted matters."),
+  tk('Fa0/1 to Fa0/3 have port security (max 1, sticky, restrict)', ['interface fa0/1', 'switchport port-security', 'switchport port-security maximum 1', 'switchport port-security mac-address sticky', 'switchport port-security violation restrict', 'exit', 'interface fa0/2', 'switchport port-security', 'switchport port-security maximum 1', 'switchport port-security mac-address sticky', 'switchport port-security violation restrict', 'exit', 'interface fa0/3', 'switchport port-security', 'switchport port-security maximum 1', 'switchport port-security mac-address sticky', 'switchport port-security violation restrict', 'exit'], s => ['fa0/1', 'fa0/2', 'fa0/3'].every(p => G.portSecurityMax(s, p, 1) && G.portSecurityStickyMac(s, p) && G.portSecurityViolation(s, p, 'restrict')), "Port security complements snooping: snooping protects DHCP, and port security limits which devices may use the port at all."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 125, title: 'NAT Essentials', difficulty: 'Medium', domain: 'IP Services', est: 30,
+  scenario: 'The edge router connects a user LAN, a DMZ with three servers, and the internet. Users must share the one public address with PAT, while each DMZ server needs its own permanent public address through static NAT. NAT is a standard exam topic, so practice marking the inside and outside interfaces correctly.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2'])
+}, [
+  'Interfaces: Gi0/0 users 192.168.1.1/24 (inside), Gi0/1 DMZ 172.16.1.1/24 (inside), Gi0/2 ISP 203.0.113.2/30 (outside, ISP is .1).',
+  'Static NAT: web 172.16.1.10 to 203.0.113.10, mail 172.16.1.20 to 203.0.113.11, ftp 172.16.1.30 to 203.0.113.12.',
+  'Users 192.168.1.0/24 share the Gi0/2 address through PAT (overload).'
+], [
+  tk('Hostname is NAT1', ['hostname NAT1'], s => G.hostnameIs(s, 'NAT1'), "A clear name identifies the edge device in logs and prompts."),
+  tk('Gi0/0 is 192.168.1.1/24, up, NAT inside', ['interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'ip nat inside', 'exit'], s => G.hasIp(s, 'gi0/0', '192.168.1.1', '255.255.255.0') && G.isUp(s, 'gi0/0') && G.natSideIs(s, 'gi0/0', 'inside'), "NAT needs to know which interfaces face the private network. Traffic arriving on an inside interface is what gets translated."),
+  tk('Gi0/1 is 172.16.1.1/24, up, NAT inside', ['interface gi0/1', 'ip address 172.16.1.1 255.255.255.0', 'no shutdown', 'ip nat inside', 'exit'], s => G.hasIp(s, 'gi0/1', '172.16.1.1', '255.255.255.0') && G.isUp(s, 'gi0/1') && G.natSideIs(s, 'gi0/1', 'inside'), "The DMZ servers use private addresses, so their interface is also an inside interface."),
+  tk('Gi0/2 is 203.0.113.2/30, up, NAT outside', ['interface gi0/2', 'ip address 203.0.113.2 255.255.255.252', 'no shutdown', 'ip nat outside', 'exit'], s => G.hasIp(s, 'gi0/2', '203.0.113.2', '255.255.255.252') && G.isUp(s, 'gi0/2') && G.natSideIs(s, 'gi0/2', 'outside'), "Both sides must be marked for NAT to work. With only the inside marked, nothing is ever translated."),
+  tk('Default route via 203.0.113.1', ['ip route 0.0.0.0 0.0.0.0 203.0.113.1'], s => G.hasDefaultRoute(s, '203.0.113.1'), "After translation the packet still needs a next hop toward the ISP."),
+  tk('Static NAT: 172.16.1.10 to 203.0.113.10 (web)', ['ip nat inside source static 172.16.1.10 203.0.113.10'], s => G.hasNatStatic(s, '172.16.1.10', '203.0.113.10'), "Static NAT is a permanent one-to-one mapping. Outside users reach the server through its public address, which never changes."),
+  tk('Static NAT: 172.16.1.20 to 203.0.113.11 (mail)', ['ip nat inside source static 172.16.1.20 203.0.113.11'], s => G.hasNatStatic(s, '172.16.1.20', '203.0.113.11'), "Each server needs its own public address because static NAT is one inside address to one outside address."),
+  tk('Static NAT: 172.16.1.30 to 203.0.113.12 (ftp)', ['ip nat inside source static 172.16.1.30 203.0.113.12'], s => G.hasNatStatic(s, '172.16.1.30', '203.0.113.12'), "The third server follows the same pattern."),
+  tk('ACL 1 permits 192.168.1.0/24', ['access-list 1 permit 192.168.1.0 0.0.0.255'], s => G.aclHasRule(s, 1, 'permit', '192.168.1.0 0.0.0.255'), "For PAT, the ACL picks which inside hosts are eligible for translation. The wildcard mask 0.0.0.255 matches the whole /24."),
+  tk('PAT is configured with ACL 1 out Gi0/2 (overload)', ['ip nat inside source list 1 interface gi0/2 overload'], s => G.hasNatOverload(s, 1), "Overload lets every user share the single Gi0/2 address by using different port numbers. Without overload, only one user could be translated at a time."),
+  tk('DNS lookup of mistyped commands is disabled', ['no ip domain-lookup'], s => G.domainLookupDisabled(s), "Keeps a mistyped command from freezing the console on a DNS lookup."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('MOTD banner contains "Unauthorized"', ['banner motd #Unauthorized access is prohibited#'], s => G.bannerContains(s, 'unauthorized'), "An internet-facing router should always show a legal warning banner."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+])
+);
+
+LABS.push(
+buildLab({
+  id: 126, title: 'Standard ACL Essentials', difficulty: 'Medium', domain: 'Security Fundamentals', est: 30,
+  scenario: 'R1 sits between two user LANs and a server LAN. Write the numbered standard ACLs for three policies: protect the servers, restrict who can manage the router, and isolate one LAN from another. Standard ACLs match only the source address, which is why placement and rule order matter so much on the exam.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2'])
+}, [
+  'Networks: LAN A 192.168.10.0/24 (Gi0/0), LAN B 192.168.20.0/24 (Gi0/1), Server LAN 10.0.0.0/24 (Gi0/2). The router is .1 in each.',
+  'ACL 10 (outbound on Gi0/2): deny the rogue PC 192.168.20.50, permit the admin PC 192.168.20.5, permit all of LAN A.',
+  'ACL 20: only host 192.168.10.5 may reach the VTY lines. ACL 30 (outbound on Gi0/0): block LAN B from LAN A, allow everything else.',
+  'ACLs are processed top-down and the first match wins, so the specific deny must come before the broader permits.'
+], [
+  tk('Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), "A clear name identifies the router in prompts and logs."),
+  tk('Gi0/0 (LAN A) is 192.168.10.1/24 and up', ['interface gi0/0', 'ip address 192.168.10.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/0', '192.168.10.1', '255.255.255.0'), "An ACL can only be applied to an interface that exists and is addressed."),
+  tk('Gi0/1 (LAN B) is 192.168.20.1/24 and up', ['interface gi0/1', 'ip address 192.168.20.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/1', '192.168.20.1', '255.255.255.0'), "The second user LAN, where the rogue and admin PCs live."),
+  tk('Gi0/2 (Server LAN) is 10.0.0.1/24 and up', ['interface gi0/2', 'ip address 10.0.0.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/2', '10.0.0.1', '255.255.255.0'), "The protected network. The ACL will be applied outbound on this interface."),
+  tk('ACL 10 starts with: deny host 192.168.20.50', ['access-list 10 deny host 192.168.20.50'], s => { const a = s.acls['10'] || []; return a.length > 0 && a[0].action === 'deny' && /^deny host 192\.168\.20\.50$/.test(a[0].raw); }, "The first match wins, so the specific deny must be first. If a broader permit for 192.168.20.0/24 came earlier, this PC would match it and never reach the deny. The host keyword is shorthand for a 0.0.0.0 wildcard."),
+  tk('ACL 10 permits host 192.168.20.5', ['access-list 10 permit host 192.168.20.5'], s => G.aclHasRule(s, 10, 'permit', 'host 192.168.20.5'), "The admin PC is explicitly allowed. Each ACL ends with an invisible deny any, so anything not permitted is dropped."),
+  tk('ACL 10 permits 192.168.10.0 0.0.0.255', ['access-list 10 permit 192.168.10.0 0.0.0.255'], s => G.aclHasRule(s, 10, 'permit', '192.168.10.0 0.0.0.255'), "The wildcard 0.0.0.255 matches the whole /24, so every host in LAN A is permitted to the servers."),
+  tk('ACL 10 is applied outbound on Gi0/2', ['interface gi0/2', 'ip access-group 10 out', 'exit'], s => G.aclAppliedOut(s, 'gi0/2', 10), "Standard ACLs only see the source address, so they belong as close to the destination as possible. Placed near the source, they would block that host from everything."),
+  tk('ACL 20 permits host 192.168.10.5', ['access-list 20 permit host 192.168.10.5'], s => G.aclHasRule(s, 20, 'permit', 'host 192.168.10.5'), "Only the management workstation should ever reach the login prompt. Everything else falls to the implicit deny."),
+  tk('ACL 20 is applied to the VTY lines (access-class in)', ['line vty 0 4', 'access-class 20 in', 'exit'], s => G.vtyAccessClassIs(s, 20), "Lines use access-class, not access-group. This restricts who may even attempt a remote login."),
+  tk('ACL 30 denies 192.168.20.0/24 first and then permits any', ['access-list 30 deny 192.168.20.0 0.0.0.255', 'access-list 30 permit any'], s => { const a = s.acls['30'] || []; return a.length >= 2 && a[0].action === 'deny' && /^deny 192\.168\.20\.0 0\.0\.0\.255$/.test(a[0].raw) && a.some(r => r.action === 'permit' && r.raw === 'permit any'); }, "The deny matches LAN B and the permit any keeps everyone else working. Without the final permit, the implicit deny would block all other traffic too."),
+  tk('ACL 30 is applied outbound on Gi0/0', ['interface gi0/0', 'ip access-group 30 out', 'exit'], s => G.aclAppliedOut(s, 'gi0/0', 30), "Outbound on the interface toward the destination LAN keeps the ACL close to the destination, as standard ACLs should be."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 127, title: 'Extended ACL Essentials', difficulty: 'Hard', domain: 'Security Fundamentals', est: 35,
+  scenario: 'The router separates a user LAN, a server segment, and the internet. Write an extended ACL that lets users reach only the services they need, blocks Telnet, allows ping, and ends with an explicit deny, then build a second ACL that drops spoofed private source addresses arriving from the internet. Extended ACLs filter on protocol, source, destination, and port.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2'])
+}, [
+  'Networks: users 192.168.1.0/24 (Gi0/0), servers 10.0.0.0/24 (Gi0/1), internet link 198.51.100.2/30 (Gi0/2). The router is .1 in the first two.',
+  'Servers: DNS 10.0.0.53, web 10.0.0.10, mail 10.0.0.25.',
+  'ACL 100 (inbound on Gi0/0) permits DNS, HTTP, HTTPS, SMTP to those servers, blocks Telnet, allows ping, then denies everything else.',
+  'ACL 101 (inbound on Gi0/2) blocks private source ranges 192.168.0.0/16 and 172.16.0.0/12, then permits the rest.'
+], [
+  tk('Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), "A clear name identifies the router in logs and prompts."),
+  tk('Gi0/0 (users) is 192.168.1.1/24 and up', ['interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/0', '192.168.1.1', '255.255.255.0'), "Extended ACLs are applied close to the source, so this user-facing interface is where ACL 100 will go."),
+  tk('Gi0/1 (servers) is 10.0.0.1/24 and up', ['interface gi0/1', 'ip address 10.0.0.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/1', '10.0.0.1', '255.255.255.0'), "The server segment the ACL permits access to."),
+  tk('Gi0/2 (internet) is 198.51.100.2/30 and up', ['interface gi0/2', 'ip address 198.51.100.2 255.255.255.252', 'no shutdown', 'exit'], addrUp('gi0/2', '198.51.100.2', '255.255.255.252'), "The untrusted side, where the anti-spoofing ACL will be applied."),
+  tk('ACL 100 permits DNS (udp) from users to host 10.0.0.53', ['access-list 100 permit udp 192.168.1.0 0.0.0.255 host 10.0.0.53 eq 53'], s => G.aclHasRule(s, 100, 'permit', 'udp 192.168.1.0 0.0.0.255 host 10.0.0.53 eq 53'), "DNS normally uses UDP port 53. Extended ACLs match protocol, source, destination, and port, which standard ACLs cannot."),
+  tk('ACL 100 permits HTTP (tcp 80) to host 10.0.0.10', ['access-list 100 permit tcp 192.168.1.0 0.0.0.255 host 10.0.0.10 eq 80'], s => G.aclHasRule(s, 100, 'permit', 'tcp 192.168.1.0 0.0.0.255 host 10.0.0.10 eq 80'), "Web traffic is TCP port 80. Naming the single host keeps the rule narrow."),
+  tk('ACL 100 permits HTTPS (tcp 443) to host 10.0.0.10', ['access-list 100 permit tcp 192.168.1.0 0.0.0.255 host 10.0.0.10 eq 443'], s => G.aclHasRule(s, 100, 'permit', 'tcp 192.168.1.0 0.0.0.255 host 10.0.0.10 eq 443'), "Secure web traffic is TCP port 443 and needs its own line."),
+  tk('ACL 100 permits SMTP (tcp 25) to host 10.0.0.25', ['access-list 100 permit tcp 192.168.1.0 0.0.0.255 host 10.0.0.25 eq 25'], s => G.aclHasRule(s, 100, 'permit', 'tcp 192.168.1.0 0.0.0.255 host 10.0.0.25 eq 25'), "Mail is delivered over TCP port 25 to the mail server only."),
+  tk('ACL 100 denies Telnet (tcp 23) from users to anywhere', ['access-list 100 deny tcp 192.168.1.0 0.0.0.255 any eq 23'], s => G.aclHasRule(s, 100, 'deny', 'tcp 192.168.1.0 0.0.0.255 any eq 23'), "Telnet sends everything in cleartext, so it is blocked outright. The explicit deny also makes the intent visible."),
+  tk('ACL 100 permits ICMP from users to anywhere', ['access-list 100 permit icmp 192.168.1.0 0.0.0.255 any'], s => G.aclHasRule(s, 100, 'permit', 'icmp 192.168.1.0 0.0.0.255 any'), "Ping and traceroute use ICMP, which is a separate protocol from TCP and UDP, so it needs its own permit."),
+  tk('ACL 100 ends with: deny ip any any', ['access-list 100 deny ip any any'], s => { const a = s.acls['100'] || []; return a.length > 0 && a[a.length - 1].action === 'deny' && a[a.length - 1].raw === 'deny ip any any'; }, "Every ACL already ends in an invisible deny. Writing it out makes the intent clear and gives a hit counter on the final deny, which helps troubleshooting."),
+  tk('ACL 100 is applied inbound on Gi0/0', ['interface gi0/0', 'ip access-group 100 in', 'exit'], s => G.aclAppliedIn(s, 'gi0/0', 100), "Extended ACLs belong close to the source. Inbound filters traffic as it arrives, before any routing decision is made."),
+  tk('ACL 101 denies private sources 192.168.0.0/16 and 172.16.0.0/12', ['access-list 101 deny ip 192.168.0.0 0.0.255.255 any', 'access-list 101 deny ip 172.16.0.0 0.15.255.255 any'], s => G.aclHasRule(s, 101, 'deny', 'ip 192.168.0.0 0.0.255.255 any') && G.aclHasRule(s, 101, 'deny', 'ip 172.16.0.0 0.15.255.255 any'), "Private addresses should never arrive from the internet, so packets claiming them are spoofed. 172.16.0.0/12 covers 172.16 through 172.31, which is the wildcard 0.15.255.255."),
+  tk('ACL 101 ends with: permit ip any any', ['access-list 101 permit ip any any'], s => { const a = s.acls['101'] || []; return a.length > 0 && a[a.length - 1].action === 'permit' && a[a.length - 1].raw === 'permit ip any any'; }, "Without a final permit, the implicit deny would block all legitimate internet traffic along with the spoofed packets."),
+  tk('ACL 101 is applied inbound on Gi0/2', ['interface gi0/2', 'ip access-group 101 in', 'exit'], s => G.aclAppliedIn(s, 'gi0/2', 101), "Applied inbound on the internet-facing port, spoofed packets are dropped before they enter the network."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 128, title: 'Port Security Essentials', difficulty: 'Medium', domain: 'Security Fundamentals', est: 30,
+  scenario: 'An office switch has several kinds of ports: single-PC desks, a desk with a phone, a conference room, a kiosk, and unused ports. Each needs a different port security policy. Practice choosing the maximum, sticky learning, and violation mode that fit each case.',
+  initial: () => switchState('Switch', ['FastEthernet0/1', 'FastEthernet0/2', 'FastEthernet0/3', 'FastEthernet0/4', 'FastEthernet0/5', 'FastEthernet0/6'])
+}, [
+  'VLANs: 10 USERS, 50 VOICE.',
+  'Fa0/1 single-PC desk: max 1, sticky, shutdown. Fa0/2 desk with phone (voice VLAN 50): max 2, sticky, restrict.',
+  'Fa0/3 conference room: max 5, protect. Fa0/4 kiosk: max 1, shutdown, no sticky. Fa0/5-6 unused.',
+  'All user ports use PortFast and BPDU Guard.'
+], [
+  tk('Hostname is PSEC1', ['hostname PSEC1'], s => G.hostnameIs(s, 'PSEC1'), "A clear name identifies which switch reported a violation."),
+  tk('VLANs 10 (USERS) and 50 (VOICE) exist', ['vlan 10', 'name USERS', 'exit', 'vlan 50', 'name VOICE', 'exit'], s => G.vlanExists(s, 10, 'USERS') && G.vlanExists(s, 50, 'VOICE'), "The VLANs must exist before ports use them."),
+  tk('Fa0/1 is in VLAN 10 with port security on, maximum 1', ['interface fa0/1', 'switchport mode access', 'switchport access vlan 10', 'switchport port-security', 'switchport port-security maximum 1', 'exit'], s => G.accessVlanIs(s, 'fa0/1', 10) && G.portSecurityEnabled(s, 'fa0/1') && G.portSecurityMax(s, 'fa0/1', 1), "Port security must be explicitly enabled before its other settings apply. One PC means a maximum of 1 address."),
+  tk('Fa0/1 uses sticky MAC learning', ['interface fa0/1', 'switchport port-security mac-address sticky', 'exit'], s => G.portSecurityStickyMac(s, 'fa0/1'), "Sticky learning locks in the first address seen and saves it to the running config, so nothing needs to be typed by hand."),
+  tk('Fa0/1 violation mode is shutdown (the default, but state it explicitly)', ['interface fa0/1', 'switchport port-security violation shutdown', 'exit'], s => G.portSecurityEnabled(s, 'fa0/1') && G.portSecurityViolation(s, 'fa0/1', 'shutdown'), "Shutdown error-disables the port on a violation. It is the default and the strictest response, right for a single-PC desk. Stating it explicitly documents the intent and protects you if the default ever differs."),
+  tk('Fa0/2 is in VLAN 10 with voice VLAN 50', ['interface fa0/2', 'switchport mode access', 'switchport access vlan 10', 'switchport voice vlan 50', 'exit'], s => G.accessVlanIs(s, 'fa0/2', 10) && G.voiceVlanIs(s, 'fa0/2', 50), "The access VLAN carries the PC and the voice VLAN carries the phone. Both live on the same port."),
+  tk('Fa0/2 has port security with maximum 2 and sticky', ['interface fa0/2', 'switchport port-security', 'switchport port-security maximum 2', 'switchport port-security mac-address sticky', 'exit'], s => G.portSecurityMax(s, 'fa0/2', 2) && G.portSecurityStickyMac(s, 'fa0/2'), "A phone plus a PC means two legitimate MAC addresses, so the maximum is 2. A limit of 1 would shut down the port on the second device."),
+  tk('Fa0/2 violation mode is restrict', ['interface fa0/2', 'switchport port-security violation restrict', 'exit'], s => G.portSecurityViolation(s, 'fa0/2', 'restrict'), "Restrict drops the offending frames and logs them, but keeps the port up so the phone is not taken down."),
+  tk('Fa0/3 is in VLAN 10 with port security on, maximum 5', ['interface fa0/3', 'switchport mode access', 'switchport access vlan 10', 'switchport port-security', 'switchport port-security maximum 5', 'exit'], s => G.accessVlanIs(s, 'fa0/3', 10) && G.portSecurityEnabled(s, 'fa0/3') && G.portSecurityMax(s, 'fa0/3', 5), "A conference room has several devices coming and going, so the limit is higher."),
+  tk('Fa0/3 violation mode is protect', ['interface fa0/3', 'switchport port-security violation protect', 'exit'], s => G.portSecurityViolation(s, 'fa0/3', 'protect'), "Protect silently drops frames from addresses over the limit, with no log message and no shutdown. It is the quietest of the three modes."),
+  tk('Fa0/4 (kiosk): VLAN 10, maximum 1, violation shutdown', ['interface fa0/4', 'switchport mode access', 'switchport access vlan 10', 'switchport port-security', 'switchport port-security maximum 1', 'switchport port-security violation shutdown', 'exit'], s => G.accessVlanIs(s, 'fa0/4', 10) && G.portSecurityMax(s, 'fa0/4', 1) && G.portSecurityViolation(s, 'fa0/4', 'shutdown'), "A kiosk has exactly one device, so a strict policy fits. Without sticky, the address is learned dynamically and lost on a reload."),
+  tk('Fa0/5 and Fa0/6 are parked in VLAN 999 and shut down', ['interface fa0/5', 'switchport mode access', 'switchport access vlan 999', 'shutdown', 'exit', 'interface fa0/6', 'switchport mode access', 'switchport access vlan 999', 'shutdown', 'exit'], s => ['fa0/5', 'fa0/6'].every(p => { const i = G.iface(s, p); return !!i && i.shutdown === true && G.accessVlanIs(s, p, 999); }), "Unused ports are an open door, so park them in an unused VLAN and shut them down."),
+  tk('Fa0/1 to Fa0/4 have PortFast', ['interface fa0/1', 'spanning-tree portfast', 'exit', 'interface fa0/2', 'spanning-tree portfast', 'exit', 'interface fa0/3', 'spanning-tree portfast', 'exit', 'interface fa0/4', 'spanning-tree portfast', 'exit'], s => ['fa0/1', 'fa0/2', 'fa0/3', 'fa0/4'].every(p => G.portfastEnabled(s, p)), "PortFast skips the STP listening and learning delay so end devices get a link immediately."),
+  tk('Fa0/1 to Fa0/4 have BPDU Guard', ['interface fa0/1', 'spanning-tree bpduguard enable', 'exit', 'interface fa0/2', 'spanning-tree bpduguard enable', 'exit', 'interface fa0/3', 'spanning-tree bpduguard enable', 'exit', 'interface fa0/4', 'spanning-tree bpduguard enable', 'exit'], s => ['fa0/1', 'fa0/2', 'fa0/3', 'fa0/4'].every(p => G.bpduguardEnabled(s, p)), "PortFast assumes only end devices. BPDU Guard shuts the port if a switch is ever plugged in, preventing a loop."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 129, title: 'STP Essentials', difficulty: 'Medium', domain: 'Network Access', est: 30,
+  scenario: 'This distribution switch must run Rapid PVST+ and be the deliberate root bridge for two VLANs and the backup root for a third. Protect the access ports with PortFast and BPDU Guard, build the two trunks, and shut down an unused port. Spanning tree root election and port protection are reliable exam topics.',
+  initial: () => switchState('Switch', ['FastEthernet0/1', 'FastEthernet0/2', 'FastEthernet0/3', 'FastEthernet0/4', 'GigabitEthernet0/1', 'GigabitEthernet0/2'])
+}, [
+  'VLANs: 10 SALES, 20 ENGINEERING, 30 HR. This switch is root primary for VLANs 10 and 20 and root secondary for VLAN 30.',
+  'Fa0/1, Fa0/2, Fa0/3 are access ports in VLANs 10, 20, 30 with PortFast and BPDU Guard. Fa0/4 is unused.',
+  'Gi0/1 (core uplink) and Gi0/2 (link to the peer distribution switch) are trunks allowing VLANs 10, 20, 30.'
+], [
+  tk('Hostname is DS1', ['hostname DS1'], s => G.hostnameIs(s, 'DS1'), "A clear name matters in STP output, where you compare root bridge IDs between switches."),
+  tk('VLANs 10, 20, 30 exist with names', ['vlan 10', 'name SALES', 'exit', 'vlan 20', 'name ENGINEERING', 'exit', 'vlan 30', 'name HR', 'exit'], s => G.vlanExists(s, 10, 'SALES') && G.vlanExists(s, 20, 'ENGINEERING') && G.vlanExists(s, 30, 'HR'), "Root bridge commands apply per VLAN, so the VLANs should exist."),
+  tk('STP mode is rapid-pvst', ['spanning-tree mode rapid-pvst'], s => G.stpModeIs(s, 'rapid-pvst'), "Legacy 802.1D can take 30 to 50 seconds to reconverge. Rapid PVST+ does it in a few seconds."),
+  tk('Root primary for VLAN 10', ['spanning-tree vlan 10 root primary'], s => G.stpRootRoleIs(s, 10, 'primary'), "Left alone, the root is whichever switch has the lowest MAC address. Root primary lowers this switch's priority so it wins deliberately."),
+  tk('Root primary for VLAN 20', ['spanning-tree vlan 20 root primary'], s => G.stpRootRoleIs(s, 20, 'primary'), "STP runs a separate instance per VLAN, so each VLAN needs its own root command."),
+  tk('Root secondary for VLAN 30', ['spanning-tree vlan 30 root secondary'], s => G.stpRootRoleIs(s, 30, 'secondary'), "Secondary sets a priority just above the primary, so this switch takes over if the primary root fails. Splitting roots between two switches also balances traffic."),
+  tk('Fa0/1: VLAN 10 with PortFast and BPDU Guard', ['interface fa0/1', 'switchport mode access', 'switchport access vlan 10', 'spanning-tree portfast', 'spanning-tree bpduguard enable', 'exit'], s => G.accessVlanIs(s, 'fa0/1', 10) && G.portfastEnabled(s, 'fa0/1') && G.bpduguardEnabled(s, 'fa0/1'), "PortFast gives end devices an immediate link and BPDU Guard shuts the port if a switch appears there."),
+  tk('Fa0/2: VLAN 20 with PortFast and BPDU Guard', ['interface fa0/2', 'switchport mode access', 'switchport access vlan 20', 'spanning-tree portfast', 'spanning-tree bpduguard enable', 'exit'], s => G.accessVlanIs(s, 'fa0/2', 20) && G.portfastEnabled(s, 'fa0/2') && G.bpduguardEnabled(s, 'fa0/2'), "The two features are meant to be used together on every end-device port."),
+  tk('Fa0/3: VLAN 30 with PortFast and BPDU Guard', ['interface fa0/3', 'switchport mode access', 'switchport access vlan 30', 'spanning-tree portfast', 'spanning-tree bpduguard enable', 'exit'], s => G.accessVlanIs(s, 'fa0/3', 30) && G.portfastEnabled(s, 'fa0/3') && G.bpduguardEnabled(s, 'fa0/3'), "Never enable PortFast on a link to another switch, only on end-device ports."),
+  tk('Gi0/1 is a trunk allowing VLANs 10, 20, 30', ['interface gi0/1', 'switchport mode trunk', 'switchport trunk allowed vlan 10,20,30', 'exit'], s => G.isTrunk(s, 'gi0/1') && [10, 20, 30].every(v => G.trunkAllows(s, 'gi0/1', v)), "Trunk ports are not PortFast ports. Restricting the allowed list keeps unrelated VLANs off the link."),
+  tk('Gi0/2 is a trunk allowing VLANs 10, 20, 30', ['interface gi0/2', 'switchport mode trunk', 'switchport trunk allowed vlan 10,20,30', 'exit'], s => G.isTrunk(s, 'gi0/2') && [10, 20, 30].every(v => G.trunkAllows(s, 'gi0/2', v)), "The link to the peer carries the same VLANs so either switch can take over as root."),
+  tk('Fa0/4 is parked in VLAN 999 and shut down', ['interface fa0/4', 'switchport mode access', 'switchport access vlan 999', 'shutdown', 'exit'], s => { const i = G.iface(s, 'fa0/4'); return !!i && i.shutdown === true && G.accessVlanIs(s, 'fa0/4', 999); }, "An unused port should not be able to connect anything, least of all another switch that could disturb the STP topology."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 130, title: 'EtherChannel Essentials', difficulty: 'Medium', domain: 'Network Access', est: 30,
+  scenario: 'This switch has three bundles: an LACP trunk to the distribution switch, an LACP bundle to a server with NIC teaming, and a static bundle to an older switch that does not speak LACP. Choosing the correct negotiation mode for each is the core of this topic on the exam.',
+  initial: () => switchState('Switch', ['FastEthernet0/1', 'FastEthernet0/2', 'FastEthernet0/3', 'FastEthernet0/4', 'FastEthernet0/5', 'FastEthernet0/6', 'Port-channel1', 'Port-channel2', 'Port-channel3'])
+}, [
+  'VLANs: 10 SALES, 20 SERVERS, 30 HR, 99 NATIVE.',
+  'Po1 (Fa0/1-2, LACP active): trunk to the distribution switch, native 99, allows 10, 20, 30, 99.',
+  'Po2 (Fa0/3-4, LACP passive): access port in VLAN 20 for the server.',
+  'Po3 (Fa0/5-6, mode on): trunk to the legacy switch allowing VLANs 10 and 30.'
+], [
+  tk('Hostname is ECH1', ['hostname ECH1'], s => G.hostnameIs(s, 'ECH1'), "A clear name identifies the switch when comparing both ends of a bundle."),
+  tk('VLANs 10, 20, 30, 99 exist with names', ['vlan 10', 'name SALES', 'exit', 'vlan 20', 'name SERVERS', 'exit', 'vlan 30', 'name HR', 'exit', 'vlan 99', 'name NATIVE', 'exit'], s => G.vlanExists(s, 10, 'SALES') && G.vlanExists(s, 20, 'SERVERS') && G.vlanExists(s, 30, 'HR') && G.vlanExists(s, 99, 'NATIVE'), "The VLANs used on the bundles must exist first."),
+  tk('Fa0/1 is in channel-group 1, LACP active', ['interface fa0/1', 'channel-group 1 mode active', 'exit'], s => G.channelGroupIs(s, 'fa0/1', 1, 'active'), "LACP active actively starts negotiation. At least one end must be active or the bundle never forms."),
+  tk('Fa0/2 is in channel-group 1, LACP active', ['interface fa0/2', 'channel-group 1 mode active', 'exit'], s => G.channelGroupIs(s, 'fa0/2', 1, 'active'), "Every member port must use the same group number and a compatible mode."),
+  tk('Port-channel1 is a trunk (native 99, allows 10, 20, 30, 99)', ['interface port-channel 1', 'switchport mode trunk', 'switchport trunk native vlan 99', 'switchport trunk allowed vlan 10,20,30,99', 'exit'], s => G.isTrunk(s, 'Port-channel1') && G.nativeVlanIs(s, 'Port-channel1', 99) && [10, 20, 30, 99].every(v => G.trunkAllows(s, 'Port-channel1', v)), "After bundling, switchport settings belong on the logical Port-channel interface, not on the member ports."),
+  tk('Fa0/3 is in channel-group 2, LACP passive', ['interface fa0/3', 'channel-group 2 mode passive', 'exit'], s => G.channelGroupIs(s, 'fa0/3', 2, 'passive'), "Passive waits for the other side to start negotiating. A passive end can pair with an active end, but two passive ends never form a bundle."),
+  tk('Fa0/4 is in channel-group 2, LACP passive', ['interface fa0/4', 'channel-group 2 mode passive', 'exit'], s => G.channelGroupIs(s, 'fa0/4', 2, 'passive'), "Both members of Po2 use the same group and mode."),
+  tk('Port-channel2 is an access port in VLAN 20', ['interface port-channel 2', 'switchport mode access', 'switchport access vlan 20', 'exit'], s => G.accessVlanIs(s, 'Port-channel2', 20), "A bundle to a server carries one VLAN, so it is an access port-channel configured on the logical interface."),
+  tk('Fa0/5 is in channel-group 3, mode on', ['interface fa0/5', 'channel-group 3 mode on', 'exit'], s => G.channelGroupIs(s, 'fa0/5', 3, 'on'), "Mode on forces the bundle with no negotiation protocol. Both ends must be on, because on cannot pair with active or passive."),
+  tk('Fa0/6 is in channel-group 3, mode on', ['interface fa0/6', 'channel-group 3 mode on', 'exit'], s => G.channelGroupIs(s, 'fa0/6', 3, 'on'), "Static bundles are used with older equipment that has no LACP or PAgP."),
+  tk('Port-channel3 is a trunk allowing VLANs 10 and 30', ['interface port-channel 3', 'switchport mode trunk', 'switchport trunk allowed vlan 10,30', 'exit'], s => G.isTrunk(s, 'Port-channel3') && G.trunkAllows(s, 'Port-channel3', 10) && G.trunkAllows(s, 'Port-channel3', 30), "The legacy switch only needs the two VLANs it serves, so the allowed list is restricted."),
+  tk('Port-channel1 has a description', ['interface port-channel 1', 'description UPLINK-TO-DSW1', 'exit'], s => G.descriptionSet(s, 'Port-channel1'), "Descriptions on bundles save time when you are tracing which port-channel leads where."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+])
+);
+
+LABS.push(
+buildLab({
+  id: 131, title: 'Management Plane Hardening Essentials', difficulty: 'Medium', domain: 'Security Fundamentals', est: 35,
+  scenario: 'A new router will be managed remotely by a small operations team. Lock down every way into the device: privileged mode, console, local accounts, SSH version 2, an ACL limiting who may connect, AAA, plus time and log services so you can audit what happens. This is the most common device-security checklist on the exam.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0'])
+}, [
+  'Management subnet 10.10.10.0/24 and jump host 10.10.20.5 may reach the VTY lines; no one else.',
+  'Accounts: admin (privilege 15) and operator (privilege 1), each with a secret. Remote access is SSH version 2 with local login.',
+  'Time and logs: NTP server 192.0.2.123 and syslog host 10.10.10.50.'
+], [
+  tk('Hostname is HARD1', ['hostname HARD1'], s => G.hostnameIs(s, 'HARD1'), "Set the name before generating keys, because the hostname and domain name together name the RSA key pair."),
+  tk('DNS lookup of mistyped commands is disabled', ['no ip domain-lookup'], s => G.domainLookupDisabled(s), "A mistyped command is otherwise treated as a hostname and the console freezes during a DNS lookup."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('Password encryption is enabled', ['service password-encryption'], s => s.servicePasswordEncryption === true, "Plain-text line passwords in the configuration become weakly obscured, enough to stop casual shoulder-surfing. It is not strong encryption, which is why secrets are still preferred."),
+  tk('MOTD banner contains "Unauthorized"', ['banner motd #Unauthorized access is prohibited#'], s => G.bannerContains(s, 'unauthorized'), "The legal notice shown before login. A baseline control on every audit."),
+  tk('Console has a password and requires login', ['line console 0', 'password Cisco@123', 'login', 'exit'], s => G.consolePasswordSet(s) && s.lines.console.login !== 'none', "A physical console connection bypasses the network entirely, so it needs its own protection. The login command is what makes the line ask for the password."),
+  tk('Local user admin exists (privilege 15, with a secret)', ['username admin privilege 15 secret AdminPass1'], s => G.userExists(s, 'admin', { privilege: 15, hasSecret: true }), "Privilege 15 gives full administrative rights. Using secret stores the password hashed."),
+  tk('Local user operator exists (privilege 1, with a secret)', ['username operator privilege 1 secret OperPass1'], s => G.userExists(s, 'operator', { privilege: 1, hasSecret: true }), "Least privilege: staff who only need to look should not get full control. Individual accounts also make every login attributable."),
+  tk('Domain name lab.local is set and RSA keys are generated', ['ip domain-name lab.local', 'crypto key generate rsa'], s => G.domainNameIs(s, 'lab.local') && G.cryptoKeyGenerated(s), "SSH needs a key pair, and IOS refuses to generate one until a domain name is set."),
+  tk('SSH version 2 is enforced', ['ip ssh version 2'], s => s.sshVersion === '2', "SSH version 1 has known weaknesses. Version 2 is the secure standard and requires keys of adequate size."),
+  tk('ACL 10 permits 10.10.10.0/24', ['access-list 10 permit 10.10.10.0 0.0.0.255'], s => G.aclHasRule(s, 10, 'permit', '10.10.10.0 0.0.0.255'), "The management subnet is allowed. The wildcard 0.0.0.255 matches the whole /24."),
+  tk('ACL 10 permits the jump host 10.10.20.5', ['access-list 10 permit host 10.10.20.5'], s => G.aclHasRule(s, 10, 'permit', 'host 10.10.20.5'), "A second approved source. Everything not matched falls to the implicit deny at the end of the ACL."),
+  tk('VTY requires local login and allows SSH only', ['line vty 0 4', 'login local', 'transport input ssh', 'exit'], s => G.vtyLoginLocal(s) && G.vtyTransportIs(s, ['ssh']), "Telnet sends passwords in cleartext, so only SSH is allowed, and local login checks the account database instead of one shared password."),
+  tk('ACL 10 is applied to the VTY lines (access-class in)', ['line vty 0 4', 'access-class 10 in', 'exit'], s => G.vtyAccessClassIs(s, 10), "Lines use access-class instead of access-group. An outsider is stopped before ever seeing a login prompt, which blocks brute-force attempts."),
+  tk('AAA is enabled and the default login method uses local', ['aaa new-model', 'aaa authentication login default local'], s => G.aaaNewModelOn(s) && G.aaaAuthLoginUsesLocal(s), "AAA gives a central, extensible framework for authentication. The method list tells the device where to check credentials, here the local database."),
+  tk('NTP server 192.0.2.123 is configured', ['ntp server 192.0.2.123'], s => G.ntpServerSet(s, '192.0.2.123'), "Accurate, synchronized time is essential for correlating log entries across devices during an investigation."),
+  tk('Syslog host 10.10.10.50 is configured', ['logging host 10.10.10.50'], s => G.loggingHostSet(s, '10.10.10.50'), "Local logs are lost on reload and can be tampered with. A central syslog server keeps a durable audit trail."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 132, title: 'Network Services Essentials', difficulty: 'Easy', domain: 'IP Services', est: 25,
+  scenario: 'This router provides the supporting services every network relies on: relaying DHCP to a central server, time synchronization with two NTP servers, centralized logging to two syslog hosts, and CDP control on the link that faces a less-trusted network.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1'])
+}, [
+  'Gi0/0 (servers) 10.10.10.1/24. Gi0/1 (users) 10.10.20.1/24. The central DHCP server is 10.10.10.5.',
+  'NTP servers: 192.0.2.123 (primary) and 192.0.2.124 (backup). Syslog hosts: 10.10.10.50 and 10.10.10.51.',
+  'Gi0/1 faces a less-trusted network, so CDP is disabled there.'
+], [
+  tk('Hostname is SVC1', ['hostname SVC1'], s => G.hostnameIs(s, 'SVC1'), "A clear name shows up in log messages sent to the syslog servers."),
+  tk('Gi0/0 is 10.10.10.1/24 and up', ['interface gi0/0', 'ip address 10.10.10.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/0', '10.10.10.1', '255.255.255.0'), "The server-side interface, where the DHCP and syslog servers live."),
+  tk('Gi0/1 is 10.10.20.1/24 and up', ['interface gi0/1', 'ip address 10.10.20.1 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/1', '10.10.20.1', '255.255.255.0'), "The user-side interface, where clients broadcast their DHCP requests."),
+  tk('Gi0/1 relays DHCP to 10.10.10.5', ['interface gi0/1', 'ip helper-address 10.10.10.5', 'exit'], s => G.helperAddressIs(s, 'gi0/1', '10.10.10.5'), "Clients find DHCP by broadcast and routers do not forward broadcasts. The helper address turns the broadcast into a unicast to the server on another subnet."),
+  tk('NTP server 192.0.2.123 is configured', ['ntp server 192.0.2.123'], s => G.ntpServerSet(s, '192.0.2.123'), "Synchronized time makes log timestamps comparable between devices, which is essential when troubleshooting."),
+  tk('NTP server 192.0.2.124 is configured', ['ntp server 192.0.2.124'], s => G.ntpServerSet(s, '192.0.2.124'), "A second server provides redundancy if the first is unreachable."),
+  tk('Syslog host 10.10.10.50 is configured', ['logging host 10.10.10.50'], s => G.loggingHostSet(s, '10.10.10.50'), "Local logs are lost on reload. A syslog server keeps a durable, searchable record."),
+  tk('Syslog host 10.10.10.51 is configured', ['logging host 10.10.10.51'], s => G.loggingHostSet(s, '10.10.10.51'), "A second collector protects the audit trail if one server is down."),
+  tk('CDP is disabled on Gi0/1', ['interface gi0/1', 'no cdp enable', 'exit'], s => G.cdpDisabledOn(s, 'gi0/1'), "CDP advertises platform, IOS version, and addresses in clear text. Turn it off on links that face less-trusted networks, and leave it on internal links where it helps troubleshooting."),
+  tk('DNS lookup of mistyped commands is disabled', ['no ip domain-lookup'], s => G.domainLookupDisabled(s), "Keeps a mistyped command from freezing the console."),
+  tk('MOTD banner contains "Unauthorized"', ['banner motd #Unauthorized access is prohibited#'], s => G.bannerContains(s, 'unauthorized'), "A legal notice shown to anyone who connects."),
+  tk('Domain name corp.local is set', ['ip domain-name corp.local'], s => G.domainNameIs(s, 'corp.local'), "The domain name is used when generating SSH keys and when completing unqualified hostnames."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 133, title: 'IPv6 Essentials', difficulty: 'Medium', domain: 'IP Connectivity', est: 30,
+  scenario: 'R1 is being brought into an IPv6 network. Enable IPv6 routing, address each interface, keep IPv4 working on one LAN as a dual-stack interface, add static and default IPv6 routes, and run OSPFv3. IPv6 addressing and routing basics are now a standard part of the exam.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'Serial0/0/0'])
+}, [
+  'Addressing: Gi0/0 2001:db8:acad:1::1/64, Gi0/1 2001:db8:acad:2::1/64, Se0/0/0 2001:db8:acad:100::1/64, Loopback0 2001:db8:acad:ff::1/128.',
+  'The next hop toward the rest of the network is 2001:db8:acad:100::2. Gi0/0 also keeps IPv4 192.168.1.1/24.',
+  'OSPFv3 process 1 uses router-id 1.1.1.1 and is enabled per interface in Area 0.'
+], [
+  tk('Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), "A clear name identifies the router in neighbor tables."),
+  tk('IPv6 unicast routing is enabled', ['ipv6 unicast-routing'], s => G.ipv6UnicastRoutingOn(s), "This global switch lets the router forward IPv6 packets between interfaces. Without it, the router only handles IPv6 traffic addressed to itself."),
+  tk('Gi0/0 is 2001:db8:acad:1::1 and up', ['interface gi0/0', 'ipv6 address 2001:db8:acad:1::1/64', 'no shutdown', 'exit'], v6Up('gi0/0', '2001:db8:acad:1::1'), "An IPv6 interface needs an explicit address with a prefix length. The /64 is the standard subnet size for a LAN."),
+  tk('Gi0/1 is 2001:db8:acad:2::1 and up', ['interface gi0/1', 'ipv6 address 2001:db8:acad:2::1/64', 'no shutdown', 'exit'], v6Up('gi0/1', '2001:db8:acad:2::1'), "Each LAN is its own /64 subnet. The fourth group (the subnet ID) is what differs between them."),
+  tk('Se0/0/0 is 2001:db8:acad:100::1 and up', ['interface se0/0/0', 'ipv6 address 2001:db8:acad:100::1/64', 'no shutdown', 'exit'], v6Up('se0/0/0', '2001:db8:acad:100::1'), "The WAN link toward the rest of the network. The default route's next hop will be on this subnet."),
+  tk('Loopback0 is 2001:db8:acad:ff::1/128 and up', ['interface loopback0', 'ipv6 address 2001:db8:acad:ff::1/128', 'no shutdown', 'exit'], v6Up('Loopback0', '2001:db8:acad:ff::1'), "A loopback is a single host, so it uses a /128 prefix, the IPv6 equivalent of an IPv4 /32."),
+  tk('Gi0/0 is dual-stack with IPv4 192.168.1.1/24', ['interface gi0/0', 'ip address 192.168.1.1 255.255.255.0', 'exit'], s => G.hasIp(s, 'gi0/0', '192.168.1.1', '255.255.255.0') && G.ipv6AddressIs(s, 'gi0/0', '2001:db8:acad:1::1'), "A dual-stack interface runs both protocols side by side. IPv6 does not replace or inherit anything from the IPv4 configuration, so each is configured separately."),
+  tk('Static IPv6 route to 2001:db8:acad:10::/64 via 2001:db8:acad:100::2', ['ipv6 route 2001:db8:acad:10::/64 2001:db8:acad:100::2'], s => G.ipv6HasRoute(s, '2001:db8:acad:10::/64', '2001:db8:acad:100::2'), "Just like IPv4, a router only knows its connected networks until told otherwise. The command pattern is prefix, then next hop."),
+  tk('IPv6 default route via 2001:db8:acad:100::2', ['ipv6 route ::/0 2001:db8:acad:100::2'], s => G.ipv6HasRoute(s, '::/0', '2001:db8:acad:100::2'), "::/0 is the IPv6 default route and matches every destination not matched more specifically."),
+  tk('OSPFv3 process 1 has router-id 1.1.1.1', ['ipv6 router ospf 1', 'router-id 1.1.1.1', 'exit'], s => G.ospfv3RouterIdIs(s, '1.1.1.1'), "OSPFv3 is a separate process from OSPFv2 and still uses a 32-bit router-id written like an IPv4 address. It must be set manually if the router has no IPv4 address."),
+  tk('OSPFv3 is enabled on Gi0/0 in Area 0', ['interface gi0/0', 'ipv6 ospf 1 area 0', 'exit'], s => G.ipv6OspfEnabledOn(s, 'gi0/0', 1, 0), "Unlike OSPFv2, OSPFv3 is enabled directly on each interface rather than with network statements."),
+  tk('OSPFv3 is enabled on Gi0/1 in Area 0', ['interface gi0/1', 'ipv6 ospf 1 area 0', 'exit'], s => G.ipv6OspfEnabledOn(s, 'gi0/1', 1, 0), "An interface left out simply never takes part in OSPFv3, even though the process is running."),
+  tk('OSPFv3 is enabled on Loopback0 in Area 0', ['interface loopback0', 'ipv6 ospf 1 area 0', 'exit'], s => G.ipv6OspfEnabledOn(s, 'Loopback0', 1, 0), "Advertising the loopback gives other routers a stable address for this router."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 134, title: 'HSRP Essentials', difficulty: 'Medium', domain: 'IP Connectivity', est: 30,
+  scenario: 'R1 is one of two gateways for two LANs. It should be the active gateway for LAN A and the standby for LAN B, with the virtual IP as the address clients use. Add tracking so a failed uplink triggers a failover. First-hop redundancy is a reliable exam topic.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1', 'GigabitEthernet0/2'])
+}, [
+  'LAN A: Gi0/0 192.168.10.2/24, HSRP group 10, virtual IP 192.168.10.1. LAN B: Gi0/1 192.168.20.2/24, HSRP group 20, virtual IP 192.168.20.1.',
+  'R1 is active for LAN A (priority 110, preempt, track the uplink) and standby for LAN B (priority 90).',
+  'Uplink: Gi0/2 10.0.0.1/30, next hop 10.0.0.2.'
+], [
+  tk('Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), "A clear name matters when two routers share a role."),
+  tk('Gi0/0 is 192.168.10.2/24 and up', ['interface gi0/0', 'ip address 192.168.10.2 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/0', '192.168.10.2', '255.255.255.0'), "Each router keeps its own real address (.2 here); the shared virtual IP (.1) is separate."),
+  tk('Gi0/1 is 192.168.20.2/24 and up', ['interface gi0/1', 'ip address 192.168.20.2 255.255.255.0', 'no shutdown', 'exit'], addrUp('gi0/1', '192.168.20.2', '255.255.255.0'), "The same for LAN B. HSRP needs a working real address on the interface."),
+  tk('Gi0/2 is 10.0.0.1/30 and up', ['interface gi0/2', 'ip address 10.0.0.1 255.255.255.252', 'no shutdown', 'exit'], addrUp('gi0/2', '10.0.0.1', '255.255.255.252'), "The uplink that tracking will watch."),
+  tk('HSRP group 10 virtual IP is 192.168.10.1', ['interface gi0/0', 'standby 10 ip 192.168.10.1', 'exit'], s => G.hsrpIp(s, 'gi0/0', 10, '192.168.10.1'), "Clients use the virtual IP as their gateway. It is not tied to either router, so the standby can take over the same address with no client reconfiguration."),
+  tk('HSRP group 10 priority is 110', ['interface gi0/0', 'standby 10 priority 110', 'exit'], s => G.hsrpPriority(s, 'gi0/0', 10, 110), "Higher priority wins the active role. The default is 100, so 110 clearly beats an unconfigured peer."),
+  tk('HSRP group 10 preempt is enabled', ['interface gi0/0', 'standby 10 preempt', 'exit'], s => G.hsrpPreempt(s, 'gi0/0'), "Without preempt, a higher-priority router that comes back from an outage does not reclaim the active role. The backup stays active until it fails."),
+  tk('HSRP group 10 tracks the uplink', ['interface gi0/0', 'standby 10 track 1 decrement 20', 'exit'], s => G.hsrpTrack(s, 'gi0/0'), "Without tracking, R1 could stay active even if its uplink fails, black-holing traffic. Tracking lowers its priority so the standby takes over."),
+  tk('HSRP group 20 virtual IP is 192.168.20.1', ['interface gi0/1', 'standby 20 ip 192.168.20.1', 'exit'], s => G.hsrpIp(s, 'gi0/1', 20, '192.168.20.1'), "Each LAN has its own group and virtual IP."),
+  tk('HSRP group 20 priority is 90', ['interface gi0/1', 'standby 20 priority 90', 'exit'], s => G.hsrpPriority(s, 'gi0/1', 20, 90), "A priority below 100 makes R1 the standby for LAN B. Splitting active roles across both routers shares the load."),
+  tk('Default route via 10.0.0.2', ['ip route 0.0.0.0 0.0.0.0 10.0.0.2'], s => G.hasDefaultRoute(s, '10.0.0.2'), "Traffic from both LANs needs a path out through the uplink."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+]),
+
+buildLab({
+  id: 135, title: 'Complete Branch Router Capstone', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 50,
+  scenario: 'This is the full branch router in one pass: secure management over SSH, router-on-a-stick for two VLANs, a WAN link, PAT for both VLANs, a local DHCP server, OSPF toward headquarters with no Hellos sent to users, and time and log services. If you can build this from memory, the routing half of the exam is in good shape.',
+  initial: () => routerState('Router', ['GigabitEthernet0/0', 'GigabitEthernet0/1'])
+}, [
+  'VLAN 10 SALES 192.168.10.0/24 and VLAN 20 ENGINEERING 192.168.20.0/24 arrive on Gi0/0. WAN: Gi0/1 203.0.113.2/30, ISP at 203.0.113.1.',
+  'Both VLANs share the Gi0/1 address through PAT. DHCP is served locally and OSPF advertises the LANs without sending Hellos toward users.',
+  'Management is SSH only with local accounts. NTP server 192.0.2.123, syslog host 10.10.10.50.'
+], [
+  tk('Hostname is BR1', ['hostname BR1'], s => G.hostnameIs(s, 'BR1'), "Set the name first. It also names the RSA key pair used for SSH."),
+  tk('Enable secret is set', ['enable secret Cisco123!'], s => G.enableSecretSet(s), SECRET_WHY),
+  tk('MOTD banner contains "Unauthorized"', ['banner motd #Unauthorized access is prohibited#'], s => G.bannerContains(s, 'unauthorized'), "The legal notice shown before login."),
+  tk('Console has a password and requires login', ['line console 0', 'password Cisco@123', 'login', 'exit'], s => G.consolePasswordSet(s) && s.lines.console.login !== 'none', "The password stores the secret and login makes the line ask for it."),
+  tk('Local user admin exists (privilege 15, with a secret)', ['username admin privilege 15 secret AdminPass1'], s => G.userExists(s, 'admin', { privilege: 15, hasSecret: true }), "Individual accounts give accountability, and VTY login local checks this database."),
+  tk('Domain name lab.local is set and RSA keys are generated', ['ip domain-name lab.local', 'crypto key generate rsa'], s => G.domainNameIs(s, 'lab.local') && G.cryptoKeyGenerated(s), "SSH needs a key pair, and key generation needs a domain name first."),
+  tk('VTY requires local login and allows SSH only', ['line vty 0 4', 'login local', 'transport input ssh', 'exit'], s => G.vtyLoginLocal(s) && G.vtyTransportIs(s, ['ssh']), "Closes the cleartext Telnet path so management credentials never cross the network unencrypted."),
+  tk('Physical Gi0/0 is up', ['interface gi0/0', 'no shutdown', 'exit'], s => G.isUp(s, 'gi0/0'), "Subinterfaces inherit their state from the physical interface, so it must be up."),
+  tk('Gi0/0.10 is VLAN 10, 192.168.10.1/24, described', ['interface gi0/0.10', 'encapsulation dot1Q 10', 'ip address 192.168.10.1 255.255.255.0', 'description SALES', 'exit'], s => G.encapsulationIs(s, 'gi0/0.10', 10) && G.hasIp(s, 'gi0/0.10', '192.168.10.1', '255.255.255.0') && G.descriptionSet(s, 'gi0/0.10'), "The encapsulation tag selects the VLAN and the address is that VLAN's default gateway."),
+  tk('Gi0/0.20 is VLAN 20, 192.168.20.1/24, described', ['interface gi0/0.20', 'encapsulation dot1Q 20', 'ip address 192.168.20.1 255.255.255.0', 'description ENGINEERING', 'exit'], s => G.encapsulationIs(s, 'gi0/0.20', 20) && G.hasIp(s, 'gi0/0.20', '192.168.20.1', '255.255.255.0') && G.descriptionSet(s, 'gi0/0.20'), "Each VLAN needs its own subinterface, with the tag matching the VLAN ID."),
+  tk('Gi0/1 is 203.0.113.2/30, up, NAT outside', ['interface gi0/1', 'ip address 203.0.113.2 255.255.255.252', 'no shutdown', 'ip nat outside', 'exit'], s => G.hasIp(s, 'gi0/1', '203.0.113.2', '255.255.255.252') && G.isUp(s, 'gi0/1') && G.natSideIs(s, 'gi0/1', 'outside'), "The WAN interface faces the public network, so it is the NAT outside side."),
+  tk('Both subinterfaces are NAT inside', ['interface gi0/0.10', 'ip nat inside', 'exit', 'interface gi0/0.20', 'ip nat inside', 'exit'], s => G.natSideIs(s, 'gi0/0.10', 'inside') && G.natSideIs(s, 'gi0/0.20', 'inside'), "NAT is marked per interface, and subinterfaces count as separate interfaces. Each VLAN needs the inside marking."),
+  tk('ACL 1 permits both VLAN subnets and PAT uses it out Gi0/1', ['access-list 1 permit 192.168.10.0 0.0.0.255', 'access-list 1 permit 192.168.20.0 0.0.0.255', 'ip nat inside source list 1 interface gi0/1 overload'], s => G.aclHasRule(s, 1, 'permit', '192.168.10.0 0.0.0.255') && G.aclHasRule(s, 1, 'permit', '192.168.20.0 0.0.0.255') && G.hasNatOverload(s, 1), "The ACL picks which hosts are translated, and overload lets all of them share the one WAN address using different port numbers."),
+  tk('Default route via 203.0.113.1', ['ip route 0.0.0.0 0.0.0.0 203.0.113.1'], s => G.hasDefaultRoute(s, '203.0.113.1'), "After translation the packet still needs a next hop toward the ISP."),
+  tk('.1 through .10 are excluded in both VLAN subnets', ['ip dhcp excluded-address 192.168.10.1 192.168.10.10', 'ip dhcp excluded-address 192.168.20.1 192.168.20.10'], s => G.hasDhcpExclusion(s, '192.168.10.1', '192.168.10.10') && G.hasDhcpExclusion(s, '192.168.20.1', '192.168.20.10'), "Reserve the gateway addresses so DHCP never leases the router's own address to a client."),
+  tk('Pool SALES: network, gateway, DNS 8.8.8.8', ['ip dhcp pool SALES', 'network 192.168.10.0 255.255.255.0', 'default-router 192.168.10.1', 'dns-server 8.8.8.8', 'exit'], s => G.dhcpPoolNetwork(s, 'SALES', '192.168.10.0', '255.255.255.0') && G.dhcpPoolDefaultRouter(s, 'SALES', '192.168.10.1') && G.dhcpPoolDnsServer(s, 'SALES', '8.8.8.8'), "Clients need the range, a gateway, and DNS to be fully usable."),
+  tk('Pool ENGINEERING: network, gateway, DNS 8.8.8.8', ['ip dhcp pool ENGINEERING', 'network 192.168.20.0 255.255.255.0', 'default-router 192.168.20.1', 'dns-server 8.8.8.8', 'exit'], s => G.dhcpPoolNetwork(s, 'ENGINEERING', '192.168.20.0', '255.255.255.0') && G.dhcpPoolDefaultRouter(s, 'ENGINEERING', '192.168.20.1') && G.dhcpPoolDnsServer(s, 'ENGINEERING', '8.8.8.8'), "The second pool must use its own gateway, not a copy of the first."),
+  tk('OSPF 1 (router-id 1.1.1.1) advertises both LANs and passes no Hellos to them', ['router ospf 1', 'router-id 1.1.1.1', 'network 192.168.10.0 0.0.0.255 area 0', 'network 192.168.20.0 0.0.0.255 area 0', 'passive-interface gi0/0.10', 'passive-interface gi0/0.20', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1') && G.ospfAdvertises(s, '192.168.10.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '192.168.20.0', '0.0.0.255', 0) && G.ospfPassiveOn(s, 'gi0/0.10') && G.ospfPassiveOn(s, 'gi0/0.20'), "OSPF advertises the LANs to headquarters, and passive interfaces keep Hellos off user VLANs, saving overhead and blocking rogue OSPF neighbors."),
+  tk('NTP server 192.0.2.123 and syslog host 10.10.10.50 are configured', ['ntp server 192.0.2.123', 'logging host 10.10.10.50'], s => G.ntpServerSet(s, '192.0.2.123') && G.loggingHostSet(s, '10.10.10.50'), "Synchronized time and centralized logs let you reconstruct what happened during an incident."),
+  tk('Running configuration is saved', [], savedCfg, SAVE_WHY, ['copy running-config startup-config'])
+])
+);
+
 if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
+
 </script>
     <script>
         // ===== Top-level tab switching =====
