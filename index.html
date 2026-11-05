@@ -80,6 +80,12 @@
         .lab-badge.diff-Medium { color: #fde68a; border-color: #854d0e; }
         .lab-badge.diff-Hard { color: #fca5a5; border-color: #7f1d1d; }
         .lab-badge.trouble { color: #fdba74; border-color: #9a3412; background: rgba(251,146,60,0.08); }
+        .lab-badge.multi { color: #67e8f9; border-color: #155e75; background: rgba(34,211,238,0.08); }
+        .device-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px; background: #0f172a; border-bottom: 1px solid var(--border); }
+        .device-tab { background: #1e293b; color: var(--text-muted); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+        .device-tab:hover { color: #e2e8f0; }
+        .device-tab.active { background: #1d4ed8; color: #fff; border-color: #3b82f6; font-weight: 600; }
+        .obj-dev { display: inline-block; background: #164e63; color: #a5f3fc; border-radius: 4px; padding: 1px 7px; font-size: 0.7rem; font-weight: 700; margin-right: 7px; vertical-align: 1px; }
 
         /* Lab workspace */
         .lab-workspace { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 20px; }
@@ -117,7 +123,7 @@
     <div class="container">
         <header>
             <h1>CCNA 200-301 Practice Portal</h1>
-            <p>8 full-length practice exams (800 unique questions) &middot; a randomized mixed-pool mode &middot; and 135 hands-on CLI labs</p>
+            <p>8 full-length practice exams (800 unique questions) &middot; a randomized mixed-pool mode &middot; and 140 hands-on CLI labs</p>
         </header>
 
         <div class="top-tabs">
@@ -207,7 +213,7 @@
         <div id="labs-tab" class="hidden">
         <section id="lab-menu-view" class="card">
             <h2>CLI Practice Labs</h2>
-            <p style="color: var(--text-muted); margin-top: 5px;">A real (simulated) Cisco IOS terminal. Type actual commands — abbreviations work, just like the real CLI, and typing <code>?</code> at any point lists every valid command for where you are (e.g. "sh?" or "switchport trunk ?" filters it further, exactly like real IOS). Grading checks the resulting device configuration, not exact command text, so there's more than one valid way to pass each lab. Click any objective to reveal both <strong>how</strong> to do it and <strong>why</strong> it matters. The 🔧 <strong>Troubleshooting</strong> labs start from an already-configured device with a hidden bug — diagnose and fix it, exam-ticket style.</p>
+            <p style="color: var(--text-muted); margin-top: 5px;">A real (simulated) Cisco IOS terminal. Type actual commands — abbreviations work, just like the real CLI, and typing <code>?</code> at any point lists every valid command for where you are (e.g. "sh?" or "switchport trunk ?" filters it further, exactly like real IOS). Grading checks the resulting device configuration, not exact command text, so there's more than one valid way to pass each lab. Click any objective to reveal both <strong>how</strong> to do it and <strong>why</strong> it matters. The 🔧 <strong>Troubleshooting</strong> labs start from an already-configured device with a hidden bug — diagnose and fix it, exam-ticket style. The 🔀 <strong>multi-router</strong> OSPF labs give you a tab per router, and the simulator works out neighbors, DR/BDR roles, routes and ping from your actual configurations, so <code>show ip ospf neighbor</code>, <code>show ip route</code> and <code>ping</code> behave like the real thing.</p>
             <div id="lab-filter-bar" class="top-tabs" style="margin: 15px 0 0 0; justify-content: flex-start;">
                 <button class="top-tab-btn active" data-filter="all" onclick="filterLabs('all')">All (<span id="count-all"></span>)</button>
                 <button class="top-tab-btn" data-filter="Easy" onclick="filterLabs('Easy')">Easy (<span id="count-easy"></span>)</button>
@@ -247,6 +253,7 @@
                         <span id="lab-device-name">Router</span>
                         <span>simulated IOS terminal</span>
                     </div>
+                    <div id="device-tabs" class="device-tabs hidden"></div>
                     <div id="terminal-body" class="terminal-body"></div>
                     <div class="terminal-input-row">
                         <span id="terminal-prompt" class="terminal-prompt">Router&gt;</span>
@@ -338,6 +345,7 @@ function freshInterface(kind) {
     ipv6: null, // { address, prefix }
     ipv6OspfProcess: null, ipv6OspfArea: null,
     ospfAuthEnabled: false, ospfAuthKey: null, ospfCost: null,
+    bandwidth: null, ospfHello: null, ospfDead: null, ospfPriority: null, ospfNetType: null, ospfIfProc: null, ospfIfArea: null,
     voiceVlan: null,
     helperAddress: null,
     channelGroup: null, channelMode: null, // EtherChannel
@@ -455,14 +463,26 @@ function synthRunningConfig(state) {
       lines.push(' switchport trunk native vlan ' + i.switchport.nativeVlan);
       lines.push(' switchport trunk allowed vlan ' + (Array.isArray(i.switchport.trunkAllowed) ? i.switchport.trunkAllowed.join(',') : 'all'));
     }
+    if (i.bandwidth) lines.push(' bandwidth ' + i.bandwidth);
     if (i.ip) lines.push(' ip address ' + i.ip + ' ' + i.mask);
+    if (i.ospfCost) lines.push(' ip ospf cost ' + i.ospfCost);
+    if (i.ospfHello) lines.push(' ip ospf hello-interval ' + i.ospfHello);
+    if (i.ospfDead) lines.push(' ip ospf dead-interval ' + i.ospfDead);
+    if (i.ospfPriority !== null && i.ospfPriority !== undefined) lines.push(' ip ospf priority ' + i.ospfPriority);
+    if (i.ospfNetType) lines.push(' ip ospf network ' + i.ospfNetType);
+    if (i.ospfAuthEnabled) lines.push(' ip ospf authentication');
+    if (i.ospfAuthKey) lines.push(' ip ospf authentication-key ' + i.ospfAuthKey);
     lines.push(i.shutdown ? ' shutdown' : ' no shutdown');
     lines.push('!');
   });
   if (state.ospf) {
     lines.push('router ospf ' + state.ospf.processId);
     if (state.ospf.routerId) lines.push(' router-id ' + state.ospf.routerId);
+    if (state.ospf.refBw && state.ospf.refBw !== 100) lines.push(' auto-cost reference-bandwidth ' + state.ospf.refBw);
+    if (state.ospf.passiveDefault) { lines.push(' passive-interface default'); (state.ospf.activeInterfaces || []).forEach(n => lines.push(' no passive-interface ' + n)); }
+    else state.ospf.passiveInterfaces.forEach(n => lines.push(' passive-interface ' + n));
     state.ospf.networks.forEach(n => lines.push(' network ' + n.network + ' ' + n.wildcard + ' area ' + n.area));
+    if (state.ospf.defaultOriginate) lines.push(' default-information originate' + (state.ospf.defaultOriginate === 'always' ? ' always' : ''));
     lines.push('!');
   }
   state.routes.forEach(r => lines.push('ip route ' + r.network + ' ' + r.mask + ' ' + r.next));
@@ -505,20 +525,6 @@ function showVlanBrief(state) {
   return out;
 }
 
-function showIpRoute(state) {
-  const out = ['Codes: C - connected, S - static, O - OSPF', ' '];
-  Object.keys(state.interfaces).forEach(name => {
-    const i = state.interfaces[name];
-    if (i.ip && !i.shutdown) out.push('C    ' + i.ip + '/' + i.mask + ' is directly connected, ' + name);
-  });
-  state.routes.forEach(r => {
-    out.push((r.network === '0.0.0.0' ? 'S*   0.0.0.0/0' : 'S    ' + r.network + '/' + r.mask) + ' [1/0] via ' + r.next);
-  });
-  if (state.ospf) {
-    state.ospf.networks.forEach(n => out.push('O    ' + n.network + ' [110/2] via OSPF area ' + n.area));
-  }
-  return out;
-}
 
 function showInterfacesTrunk(state) {
   const out = ['Port        Mode         Encapsulation  Status        Native vlan'];
@@ -539,7 +545,8 @@ function showInterfacesTrunk(state) {
 const HELP_TABLE = {
   user: [
     { cmd: 'enable', desc: 'Turn on privileged commands' },
-    { cmd: 'show', desc: 'Show running system information' }
+    { cmd: 'show', desc: 'Show running system information' },
+    { cmd: 'ping', desc: 'Send echo messages to test reachability (try: ping x.x.x.x source loopback0)' }
   ],
   priv: [
     { cmd: 'disable', desc: 'Return to user EXEC mode' },
@@ -547,9 +554,13 @@ const HELP_TABLE = {
     { cmd: 'copy running-config startup-config', desc: 'Save the running configuration' },
     { cmd: 'write', desc: 'Save the running configuration (shortcut for copy run start)' },
     { cmd: 'reload', desc: 'Restart the device (simulated only)' },
+    { cmd: 'ping', desc: 'Send echo messages to test reachability (try: ping x.x.x.x source loopback0)' },
+    { cmd: 'clear ip ospf process', desc: 'Reset OSPF adjacencies (simulated)' },
+    { cmd: 'show ip ospf neighbor', desc: 'Show OSPF neighbors, their state, and DR/BDR role' },
+    { cmd: 'show ip ospf', desc: 'Show the OSPF process summary (router ID, reference bandwidth)' },
     { cmd: 'show running-config', desc: 'Show the current configuration' },
     { cmd: 'show ip interface brief', desc: 'Summary of interface IP/status' },
-    { cmd: 'show ip route', desc: 'Show the IP routing table' },
+    { cmd: 'show ip route', desc: 'Show the IP routing table (add "ospf" to filter)' },
     { cmd: 'show vlan brief', desc: 'Show VLANs and their assigned ports' },
     { cmd: 'show interfaces trunk', desc: 'Show trunking interfaces and allowed VLANs' },
     { cmd: 'show interfaces status', desc: 'Per-port status/VLAN/duplex/speed summary' },
@@ -630,6 +641,12 @@ const HELP_TABLE = {
     { cmd: 'ip ospf authentication', desc: 'Enable OSPF authentication on this interface' },
     { cmd: 'ip ospf authentication-key', desc: 'Set the OSPF plaintext authentication key' },
     { cmd: 'ip ospf cost', desc: 'Manually set this interface\'s OSPF cost' },
+    { cmd: 'bandwidth', desc: 'Set the interface bandwidth in kbps (OSPF cost is derived from it)' },
+    { cmd: 'ip ospf hello-interval', desc: 'Set the OSPF Hello interval in seconds (must match the neighbor)' },
+    { cmd: 'ip ospf dead-interval', desc: 'Set the OSPF dead interval in seconds (must match the neighbor)' },
+    { cmd: 'ip ospf priority', desc: 'Set the OSPF priority for DR/BDR election (0 = never DR)' },
+    { cmd: 'ip ospf network', desc: 'Set the OSPF network type (point-to-point or broadcast)' },
+    { cmd: 'ip ospf 1 area 0', desc: 'Enable OSPF directly on this interface (process, area)' },
     { cmd: 'ip dhcp snooping trust', desc: 'Mark this port as a trusted DHCP snooping port' },
     { cmd: 'ipv6 address', desc: 'Set the interface\'s IPv6 address and prefix length' },
     { cmd: 'ipv6 ospf', desc: 'Enable OSPFv3 on this interface, in a given area' },
@@ -655,6 +672,11 @@ const HELP_TABLE = {
     { cmd: 'network', desc: 'Advertise a network (OSPF: with wildcard mask and area; EIGRP: classful or with wildcard)' },
     { cmd: 'passive-interface', desc: 'Stop sending/receiving Hellos on an interface (still advertises it)' },
     { cmd: 'no passive-interface', desc: 'Re-enable Hellos on a previously passive interface' },
+    { cmd: 'passive-interface default', desc: 'Make every interface passive, then re-enable only the ones that need neighbors' },
+    { cmd: 'auto-cost reference-bandwidth', desc: 'Set the OSPF reference bandwidth in Mbps (default 100; use the same value on every router)' },
+    { cmd: 'default-information originate', desc: 'Advertise a default route into OSPF (add "always" to advertise without one)' },
+    { cmd: 'maximum-paths', desc: 'Set how many equal-cost paths OSPF may install (default 4)' },
+    { cmd: 'log-adjacency-changes', desc: 'Log neighbor up/down events' },
     { cmd: 'redistribute', desc: 'Import routes from another source (e.g. static, connected, another protocol)' },
     { cmd: 'no auto-summary', desc: 'Disable EIGRP automatic classful summarization' },
     { cmd: 'exit', desc: 'Return to global configuration mode' },
@@ -674,7 +696,25 @@ const HELP_TABLE = {
   ]
 };
 
+// Like real IOS, a global-configuration command typed inside a sub-mode (interface, router,
+// line, vlan, dhcp) is accepted and returns you to global configuration mode. If the command
+// is not valid there either, the original sub-mode and its error are kept.
 function runCommand(state, ctx, rawLine) {
+  const res = runCommandCore(state, ctx, rawLine);
+  if (res && res.illegal && ctx.mode.startsWith('config') && ctx.mode !== 'config') {
+    const line = rawLine.replace(/\s+/g, ' ').trim();
+    if (line === '' || /^do\s/i.test(line) || line.endsWith('?')) return res;
+    const saved = { mode: ctx.mode, curIf: ctx.curIf, curLine: ctx.curLine, curVlan: ctx.curVlan, routerProto: ctx.routerProto, curDhcpPool: ctx.curDhcpPool };
+    ctx.mode = 'config'; ctx.curIf = null; ctx.curLine = null; ctx.curVlan = null; ctx.routerProto = null; ctx.curDhcpPool = null;
+    const res2 = runCommandCore(state, ctx, rawLine);
+    if (res2 && !res2.illegal) return res2;
+    Object.assign(ctx, saved);
+    return res;
+  }
+  return res;
+}
+
+function runCommandCore(state, ctx, rawLine) {
   const line = rawLine.replace(/\s+/g, ' ').trim();
   if (line === '') return { output: [] };
 
@@ -726,6 +766,7 @@ function runCommand(state, ctx, rawLine) {
 
   if (ctx.mode === 'user') {
     if (matches(cmd0, 'enable', 2)) { ctx.mode = 'priv'; return { output: [] }; }
+    if (matches(cmd0, 'ping', 2)) return doPing(state, t);
     if (matches(cmd0, 'show', 2)) return dispatchShow(state, t);
     return illegal();
   }
@@ -736,6 +777,8 @@ function runCommand(state, ctx, rawLine) {
     if (matches(cmd0, 'show', 2)) return dispatchShow(state, t);
     if (matches(cmd0, 'copy', 3) && t[1] && matches(t[1], 'running-config', 4)) { state.savedToStartup = true; return { output: ['Destination filename [startup-config]?', 'Building configuration...', '[OK]'] }; }
     if (matches(cmd0, 'write', 2)) { state.savedToStartup = true; return { output: ['Building configuration...', '[OK]'] }; }
+    if (matches(cmd0, 'ping', 2)) return doPing(state, t);
+    if (matches(cmd0, 'clear', 2)) return { output: ['(simulated) OSPF neighbor tables refresh automatically in this lab.'] };
     if (matches(cmd0, 'reload', 3)) return { output: ['Proceed with reload? (lab simulation — no actual reload occurs)'] };
     return illegal();
   }
@@ -786,7 +829,7 @@ function runCommand(state, ctx, rawLine) {
     }
 
     if (matches(cmd0, 'router', 3) && t[1] && matches(t[1], 'ospf', 2) && t[2]) {
-      state.ospf = state.ospf && state.ospf.processId === t[2] ? state.ospf : { processId: t[2], routerId: null, networks: [], redistribute: [], passiveInterfaces: [] };
+      state.ospf = state.ospf && state.ospf.processId === t[2] ? state.ospf : { processId: t[2], routerId: null, networks: [], redistribute: [], passiveInterfaces: [], refBw: 100, defaultOriginate: false, maxPaths: 4, passiveDefault: false, activeInterfaces: [] };
       ctx.mode = 'config-router'; ctx.routerProto = 'ospf';
       return { output: [] };
     }
@@ -1039,6 +1082,18 @@ function runCommand(state, ctx, rawLine) {
     if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && matches(t[2], 'cost', 3) && t[3]) {
       iface.ospfCost = parseInt(t[3], 10); return { output: [] };
     }
+    if (matches(cmd0, 'bandwidth', 2) && t[1] && /^\d+$/.test(t[1])) { iface.bandwidth = parseInt(t[1], 10); return { output: [] }; }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && matches(t[2], 'hello-interval', 3) && t[3] && /^\d+$/.test(t[3])) { iface.ospfHello = parseInt(t[3], 10); return { output: [] }; }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && matches(t[2], 'dead-interval', 3) && t[3] && /^\d+$/.test(t[3])) { iface.ospfDead = parseInt(t[3], 10); return { output: [] }; }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && matches(t[2], 'priority', 3) && t[3] && /^\d+$/.test(t[3])) { iface.ospfPriority = parseInt(t[3], 10); return { output: [] }; }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && matches(t[2], 'network', 3) && t[3]) {
+      if (matches(t[3], 'point-to-point', 5)) { iface.ospfNetType = 'point-to-point'; return { output: [] }; }
+      if (matches(t[3], 'broadcast', 3)) { iface.ospfNetType = 'broadcast'; return { output: [] }; }
+      return illegal();
+    }
+    if (matches(cmd0, 'ip', 2) && t[1] && matches(t[1], 'ospf', 2) && t[2] && /^\d+$/.test(t[2]) && t[3] && matches(t[3], 'area', 3) && t[4]) {
+      iface.ospfIfProc = t[2]; iface.ospfIfArea = t[4]; return { output: [] };
+    }
 
     // Voice VLAN
     if (matches(cmd0, 'switchport', 5) && t[1] && matches(t[1], 'voice', 4) && t[2] && matches(t[2], 'vlan', 3) && t[3]) {
@@ -1097,15 +1152,30 @@ function runCommand(state, ctx, rawLine) {
       state.ospf.redistribute.push(t[1].toLowerCase()); return { output: [] };
     }
     if (ctx.routerProto === 'ospf' && matches(cmd0, 'passive-interface', 9) && t[1]) {
+      if (matches(t[1], 'default', 3)) { state.ospf.passiveDefault = true; return { output: [] }; }
       const ifName = normalizeIfName(t.slice(1).join(''));
       if (ifName && !state.ospf.passiveInterfaces.includes(ifName)) state.ospf.passiveInterfaces.push(ifName);
+      if (ifName) state.ospf.activeInterfaces = (state.ospf.activeInterfaces || []).filter(n => n !== ifName);
       return { output: [] };
     }
     if (ctx.routerProto === 'ospf' && cmd0 === 'no' && t[1] && matches(t[1], 'passive-interface', 9) && t[2]) {
+      if (matches(t[2], 'default', 3)) { state.ospf.passiveDefault = false; state.ospf.activeInterfaces = []; return { output: [] }; }
       const ifName = normalizeIfName(t.slice(2).join(''));
       state.ospf.passiveInterfaces = state.ospf.passiveInterfaces.filter(n => n !== ifName);
+      if (ifName && state.ospf.passiveDefault && !(state.ospf.activeInterfaces || []).includes(ifName)) state.ospf.activeInterfaces = (state.ospf.activeInterfaces || []).concat([ifName]);
       return { output: [] };
     }
+    if (ctx.routerProto === 'ospf' && matches(cmd0, 'auto-cost', 4) && t[1] && matches(t[1], 'reference-bandwidth', 3) && t[2]) {
+      const v = parseInt(t[2], 10);
+      if (isNaN(v) || v < 1) return illegal();
+      state.ospf.refBw = v;
+      return { output: ['% OSPF: Reference bandwidth is changed.', '        Please ensure reference bandwidth is consistent across all routers.'] };
+    }
+    if (ctx.routerProto === 'ospf' && matches(cmd0, 'default-information', 3) && t[1] && matches(t[1], 'originate', 3)) {
+      state.ospf.defaultOriginate = (t[2] && matches(t[2], 'always', 3)) ? 'always' : true; return { output: [] };
+    }
+    if (ctx.routerProto === 'ospf' && matches(cmd0, 'maximum-paths', 3) && t[1]) { state.ospf.maxPaths = parseInt(t[1], 10) || 4; return { output: [] }; }
+    if (ctx.routerProto === 'ospf' && matches(cmd0, 'log-adjacency-changes', 3)) return { output: [] };
     if (ctx.routerProto === 'eigrp' && matches(cmd0, 'network', 3) && t[1]) {
       state.eigrp.networks.push({ network: t[1], wildcard: t[2] || null });
       return { output: [] };
@@ -1188,37 +1258,7 @@ function showEtherchannelSummary(state) {
   return out;
 }
 
-function showIpOspfInterfaceBrief(state) {
-  const out = ['Interface     PID   Area          IP Address/Mask    Cost  State  Passive'];
-  if (!state.ospf) { out.push('% OSPF is not running'); return out; }
-  Object.keys(state.interfaces).forEach(name => {
-    const i = state.interfaces[name];
-    if (!i.ip) return;
-    const match = state.ospf.networks.find(n => true); // networks listed generally; show all OSPF-enabled interfaces heuristically
-    const isPassive = state.ospf.passiveInterfaces.includes(name);
-    const cost = i.ospfCost || '(auto)';
-    out.push(name.padEnd(23) + String(state.ospf.processId).padEnd(6) + '0'.padEnd(14) + (i.ip + '/' + i.mask).padEnd(28) + String(cost).padEnd(6) + (i.shutdown ? 'DOWN'.padEnd(7) : 'UP'.padEnd(7)) + (isPassive ? 'Yes' : 'No'));
-  });
-  return out;
-}
 
-function showIpProtocols(state) {
-  const out = [];
-  if (state.ospf) {
-    out.push('Routing Protocol is "ospf ' + state.ospf.processId + '"');
-    out.push('  Router ID ' + (state.ospf.routerId || '(not set)'));
-    state.ospf.networks.forEach(n => out.push('  Network ' + n.network + ' ' + n.wildcard + ' Area ' + n.area));
-    if (state.ospf.passiveInterfaces.length) out.push('  Passive Interface(s): ' + state.ospf.passiveInterfaces.join(', '));
-    if (state.ospf.redistribute.length) out.push('  Redistributing: ' + state.ospf.redistribute.join(', '));
-  }
-  if (state.eigrp) {
-    out.push('Routing Protocol is "eigrp ' + state.eigrp.as + '"');
-    state.eigrp.networks.forEach(n => out.push('  Network ' + n.network + (n.wildcard ? ' ' + n.wildcard : '')));
-    out.push('  Automatic network summarization is ' + (state.eigrp.noAutoSummary ? 'not in effect' : 'in effect'));
-  }
-  if (!state.ospf && !state.eigrp) out.push('% No routing protocol is configured');
-  return out;
-}
 
 function showPortSecurity(state) {
   const out = ['Port      Status       Max  CurAddr  Violation  Security Action'];
@@ -1269,16 +1309,408 @@ function showCdpInterface(state) {
   return out;
 }
 
+// ============================================================
+// Multi-router OSPF simulation. Labs that define `devices` and
+// `segments` get neighbor adjacencies (hello/dead/area/auth/subnet
+// compatibility, DR/BDR election), SPF routes (cost, reference
+// bandwidth, ECMP, default-information originate) and ping, all
+// computed from the routers' actual configurations.
+// ============================================================
+let SIM_HOOK = null;
+function setSimHook(fn) { SIM_HOOK = fn || null; }
+function currentSim() { try { return SIM_HOOK ? SIM_HOOK() : null; } catch (e) { return null; } }
+
+function simN(ip) { const p = ip.split('.').map(Number); return (((p[0] * 256 + p[1]) * 256 + p[2]) * 256 + p[3]); }
+function simIp(n) { return [Math.floor(n / 16777216) % 256, Math.floor(n / 65536) % 256, Math.floor(n / 256) % 256, n % 256].join('.'); }
+function simLen(mask) { const m = simN(mask); let c = 0; for (let b = 31; b >= 0; b--) { if (Math.floor(m / Math.pow(2, b)) % 2 === 1) c++; else break; } return c; }
+function simMaskFromLen(len) { return simIp(len === 0 ? 0 : (0xFFFFFFFF << (32 - len)) >>> 0); }
+function simNet(ip, mask) { return (simN(ip) & simN(mask)) >>> 0; }
+
+function simBandwidthKbps(name, i) {
+  if (i.bandwidth) return i.bandwidth;
+  if (/^GigabitEthernet/.test(name)) return 1000000;
+  if (/^FastEthernet/.test(name)) return 100000;
+  if (/^Serial/.test(name)) return 1544;
+  if (/^Ethernet/.test(name)) return 10000;
+  return 100000;
+}
+function simCost(state, name) {
+  const i = state.interfaces[name];
+  if (i.ospfCost) return i.ospfCost;
+  if (/^Loopback/.test(name)) return 1;
+  const ref = (state.ospf && state.ospf.refBw) || 100;
+  return Math.max(1, Math.floor((ref * 1000) / simBandwidthKbps(name, i)));
+}
+function simIsPassive(state, name) {
+  const o = state.ospf; if (!o) return false;
+  return o.passiveDefault ? !(o.activeInterfaces || []).includes(name) : (o.passiveInterfaces || []).includes(name);
+}
+function simRouterId(state) {
+  if (!state.ospf) return null;
+  if (state.ospf.routerId) return state.ospf.routerId;
+  let best = null;
+  const consider = ip => { if (best === null || simN(ip) > simN(best)) best = ip; };
+  Object.keys(state.interfaces).forEach(n => { const i = state.interfaces[n]; if (/^Loopback/.test(n) && i.ip && !i.shutdown) consider(i.ip); });
+  if (best) return best;
+  Object.keys(state.interfaces).forEach(n => { const i = state.interfaces[n]; if (i.ip && !i.shutdown) consider(i.ip); });
+  return best;
+}
+function simOspfIfaces(state) {
+  const out = {};
+  const o = state.ospf;
+  if (!o) return out;
+  Object.keys(state.interfaces).forEach(name => {
+    const i = state.interfaces[name];
+    if (!i.ip || !i.mask || i.shutdown) return;
+    let area = null;
+    if (i.ospfIfArea !== null && i.ospfIfArea !== undefined && String(i.ospfIfProc) === String(o.processId)) area = String(i.ospfIfArea);
+    else {
+      for (const n of o.networks) {
+        const wc = simN(n.wildcard);
+        if (((simN(i.ip) & ~wc) >>> 0) === ((simN(n.network) & ~wc) >>> 0)) { area = String(n.area); break; }
+      }
+    }
+    if (area === null) return;
+    const loop = /^Loopback/.test(name);
+    const hello = i.ospfHello || 10;
+    out[name] = {
+      name: name, ip: i.ip, mask: i.mask, len: simLen(i.mask), area: area, loop: loop,
+      cost: simCost(state, name), hello: hello, dead: i.ospfDead || hello * 4,
+      priority: (i.ospfPriority === null || i.ospfPriority === undefined) ? 1 : i.ospfPriority,
+      netType: loop ? 'loopback' : (i.ospfNetType || (/^Serial/.test(name) ? 'point-to-point' : 'broadcast')),
+      passive: simIsPassive(state, name),
+      authEnabled: !!i.ospfAuthEnabled, authKey: i.ospfAuthKey || null
+    };
+  });
+  return out;
+}
+function simCompat(a, b) {
+  const x = a.inf, y = b.inf;
+  if (!a.rid || !b.rid || a.rid === b.rid) return false;
+  if (x.mask !== y.mask || simNet(x.ip, x.mask) !== simNet(y.ip, y.mask)) return false;
+  if (x.area !== y.area) return false;
+  if (x.hello !== y.hello || x.dead !== y.dead) return false;
+  if (x.authEnabled !== y.authEnabled) return false;
+  if (x.authEnabled && x.authKey !== y.authKey) return false;
+  return true;
+}
+
+// devs: { key: state }, segments: [ [ {d:key, i:interfaceName}, ... ], ... ]
+function simulateOspf(devs, segments) {
+  const keys = Object.keys(devs);
+  const info = {};
+  keys.forEach(k => { info[k] = { rid: simRouterId(devs[k]), ifaces: simOspfIfaces(devs[k]) }; });
+
+  // 1. adjacency groups per segment
+  const comps = [];
+  (segments || []).forEach(seg => {
+    const act = [];
+    seg.forEach(m => {
+      const inf = info[m.d] && info[m.d].ifaces[m.i];
+      if (inf && !inf.passive && info[m.d].rid && inf.netType !== 'loopback') act.push({ d: m.d, i: m.i, inf: inf, rid: info[m.d].rid });
+    });
+    const used = act.map(() => false);
+    for (let a = 0; a < act.length; a++) {
+      if (used[a]) continue;
+      const group = [a]; used[a] = true;
+      for (let g = 0; g < group.length; g++) {
+        for (let b = 0; b < act.length; b++) {
+          if (!used[b] && simCompat(act[group[g]], act[b])) { used[b] = true; group.push(b); }
+        }
+      }
+      if (group.length >= 2) comps.push({ members: group.map(x => act[x]) });
+    }
+  });
+  comps.forEach((c, ci) => {
+    c.id = ci;
+    c.p2p = c.members.every(m => m.inf.netType === 'point-to-point' || m.inf.netType === 'point-to-multipoint');
+    if (c.p2p) { c.formed = true; c.members.forEach(m => { m.role = 'P2P'; }); }
+    else {
+      const cands = c.members.filter(m => m.inf.priority > 0).sort((x, y) => (y.inf.priority - x.inf.priority) || (simN(y.rid) - simN(x.rid)));
+      c.dr = cands[0] || null; c.bdr = cands[1] || null;
+      c.formed = !!c.dr;
+      c.members.forEach(m => { m.role = m === c.dr ? 'DR' : (m === c.bdr ? 'BDR' : 'DROTHER'); });
+    }
+  });
+  const neighbors = {};
+  keys.forEach(k => { neighbors[k] = []; });
+  comps.forEach(c => c.members.forEach(me => c.members.forEach(other => {
+    if (other === me) return;
+    let st, role;
+    if (c.p2p) { st = 'FULL'; role = '-'; }
+    else { st = (c.formed && (me.role !== 'DROTHER' || other.role !== 'DROTHER')) ? 'FULL' : '2WAY'; role = other.role; }
+    neighbors[me.d].push({ rid: other.rid, pri: other.inf.priority, state: st, role: role, address: other.inf.ip, iface: me.i, comp: c.id });
+  })));
+
+  // 2. SPF graph: routers + transit segments
+  const edges = {};
+  const addEdge = (u, v, w) => { (edges[u] = edges[u] || []).push({ to: v, cost: w }); };
+  comps.forEach(c => { if (!c.formed) return; c.members.forEach(m => { addEdge('R:' + m.d, 'S:' + c.id, m.inf.cost); addEdge('S:' + c.id, 'R:' + m.d, 0); }); });
+  function spf(src) {
+    const dist = {}, fh = {}, done = {};
+    const start = 'R:' + src; dist[start] = 0; fh[start] = [];
+    for (;;) {
+      let u = null;
+      Object.keys(dist).forEach(n => { if (!done[n] && (u === null || dist[n] < dist[u])) u = n; });
+      if (u === null) break;
+      done[u] = true;
+      (edges[u] || []).forEach(e => {
+        const v = e.to; if (v === start) return;
+        const nd = dist[u] + e.cost;
+        let nfh;
+        if (u === start) nfh = 'DIRECT';
+        else if (fh[u] === 'DIRECT') nfh = [{ seg: u.slice(2), via: v.slice(2) }];
+        else nfh = fh[u];
+        if (!(v in dist) || nd < dist[v]) { dist[v] = nd; fh[v] = nfh; }
+        else if (nd === dist[v] && !done[v] && Array.isArray(nfh) && Array.isArray(fh[v])) {
+          nfh.forEach(x => { if (!fh[v].some(y => y.seg === x.seg && y.via === x.via)) fh[v].push(x); });
+        }
+      });
+    }
+    return { dist: dist, fh: fh };
+  }
+  const stubs = {};
+  keys.forEach(k => {
+    stubs[k] = Object.keys(info[k].ifaces).map(n => {
+      const f = info[k].ifaces[n];
+      return f.loop ? { net: simN(f.ip), len: 32, cost: f.cost, iface: n } : { net: simNet(f.ip, f.mask), len: f.len, cost: f.cost, iface: n };
+    });
+  });
+  const routes = {};
+  keys.forEach(X => {
+    const r = spf(X);
+    const maxPaths = (devs[X].ospf && devs[X].ospf.maxPaths) || 4;
+    const conn = {};
+    Object.keys(devs[X].interfaces).forEach(n => { const i = devs[X].interfaces[n]; if (i.ip && i.mask && !i.shutdown) conn[simNet(i.ip, i.mask) + '/' + simLen(i.mask)] = true; });
+    const best = {};
+    keys.forEach(R => {
+      if (R === X) return;
+      const d = r.dist['R:' + R]; const hops = r.fh['R:' + R];
+      if (d === undefined || !Array.isArray(hops)) return;
+      stubs[R].forEach(p => {
+        const key = p.net + '/' + p.len;
+        if (conn[key]) return;
+        const total = d + p.cost;
+        const b = best[key];
+        if (!b || total < b.cost) best[key] = { net: p.net, len: p.len, cost: total, hops: hops.slice() };
+        else if (total === b.cost) hops.forEach(h => { if (!b.hops.some(y => y.seg === h.seg && y.via === h.via)) b.hops.push(h); });
+      });
+    });
+    const list = Object.keys(best).map(key => {
+      const b = best[key];
+      const nextHops = b.hops.slice(0, maxPaths).map(h => {
+        const comp = comps[+h.seg];
+        return { ip: comp.members.find(m => m.d === h.via).inf.ip, iface: comp.members.find(m => m.d === X).i };
+      });
+      return { net: b.net, len: b.len, prefix: simIp(b.net), mask: simMaskFromLen(b.len), cost: b.cost, nextHops: nextHops, type: 'O' };
+    });
+    // default route advertised by default-information originate (external type 2, metric 1)
+    let bd = null;
+    keys.forEach(R => {
+      if (R === X) return;
+      const o = devs[R].ospf; if (!o || !o.defaultOriginate) return;
+      const hasDef = devs[R].routes.some(q => q.network === '0.0.0.0' && q.mask === '0.0.0.0');
+      if (o.defaultOriginate !== 'always' && !hasDef) return;
+      const d = r.dist['R:' + R]; const hops = r.fh['R:' + R];
+      if (d === undefined || !Array.isArray(hops)) return;
+      if (bd === null || d < bd.d) bd = { d: d, hops: hops.slice() };
+      else if (d === bd.d) hops.forEach(h => { if (!bd.hops.some(y => y.seg === h.seg && y.via === h.via)) bd.hops.push(h); });
+    });
+    if (bd) {
+      list.push({ net: 0, len: 0, prefix: '0.0.0.0', mask: '0.0.0.0', cost: 1, type: 'E2', nextHops: bd.hops.slice(0, maxPaths).map(h => {
+        const comp = comps[+h.seg];
+        return { ip: comp.members.find(m => m.d === h.via).inf.ip, iface: comp.members.find(m => m.d === X).i };
+      }) });
+    }
+    routes[X] = list;
+  });
+
+  // 3. forwarding (for ping)
+  const ownsIp = (st, ip) => Object.keys(st.interfaces).some(n => st.interfaces[n].ip === ip && !st.interfaces[n].shutdown);
+  function lookup(X, dst) {
+    const st = devs[X]; const d = simN(dst);
+    let best = null;
+    const consider = (net, len, ad, entry) => {
+      const maskN = len === 0 ? 0 : (0xFFFFFFFF << (32 - len)) >>> 0;
+      if (((d & maskN) >>> 0) !== net) return;
+      if (!best || len > best.len || (len === best.len && ad < best.ad)) best = Object.assign({ len: len, ad: ad }, entry);
+    };
+    Object.keys(st.interfaces).forEach(n => { const i = st.interfaces[n]; if (i.ip && i.mask && !i.shutdown) consider(simNet(i.ip, i.mask), simLen(i.mask), 0, { conn: true, iface: n }); });
+    st.routes.forEach(q => consider(simNet(q.network, q.mask), simLen(q.mask), q.ad ? parseInt(q.ad, 10) : 1, { next: q.next }));
+    (routes[X] || []).forEach(q => { if (q.nextHops.length) consider(q.net, q.len, 110, { next: q.nextHops[0].ip }); });
+    return best;
+  }
+  const segsOf = (key, iface) => (segments || []).filter(seg => seg.some(m => m.d === key && m.i === iface));
+  function findPeer(key, iface, ip) {
+    for (const seg of segsOf(key, iface)) for (const m of seg) {
+      if (m.d === key) continue;
+      const pi = devs[m.d] && devs[m.d].interfaces[m.i];
+      if (pi && pi.ip === ip && !pi.shutdown) return m.d;
+    }
+    return null;
+  }
+  function ifaceToward(key, ip) {
+    const st = devs[key];
+    return Object.keys(st.interfaces).find(nm => { const i = st.interfaces[nm]; return i.ip && i.mask && !i.shutdown && simNet(i.ip, i.mask) === simNet(ip, i.mask); }) || null;
+  }
+  function path(from, dst, srcIp) {
+    let cur = from;
+    for (let hop = 0; hop < 16; hop++) {
+      const st = devs[cur];
+      if (ownsIp(st, dst)) return { ok: true, end: cur, srcIp: srcIp || dst };
+      const r = lookup(cur, dst);
+      if (!r) return { ok: false };
+      let egress, nextIp;
+      if (r.conn) { egress = r.iface; nextIp = dst; }
+      else { nextIp = r.next; if (!nextIp) return { ok: false }; egress = ifaceToward(cur, nextIp); if (!egress) return { ok: false }; }
+      if (!srcIp) srcIp = st.interfaces[egress].ip;
+      const peer = findPeer(cur, egress, nextIp);
+      if (!peer) return { ok: false };
+      cur = peer;
+    }
+    return { ok: false };
+  }
+  const idOf = st => keys.find(k => devs[k] === st);
+  const norm = n => normalizeIfName(n) || n;
+  return {
+    neighbors: st => neighbors[idOf(st)] || [],
+    routerId: st => (info[idOf(st)] || {}).rid || null,
+    ifInfo: (st, name) => { const k = idOf(st); return k ? (info[k].ifaces[norm(name)] || null) : null; },
+    ifCost: (st, name) => { const k = idOf(st); const f = k && info[k].ifaces[norm(name)]; return f ? f.cost : null; },
+    ifRole: (st, name) => {
+      const k = idOf(st), n = norm(name); if (!k) return null;
+      for (const c of comps) { const m = c.members.find(x => x.d === k && x.i === n); if (m) return m.role; }
+      const f = info[k].ifaces[n]; if (!f) return null;
+      return f.loop ? 'LOOP' : (f.netType === 'point-to-point' ? 'P2P' : 'DR');
+    },
+    routes: st => routes[idOf(st)] || [],
+    routeFor: (st, cidr) => {
+      const p = cidr.split('/'); const net = simN(p[0]), len = parseInt(p[1], 10);
+      return (routes[idOf(st)] || []).find(r => r.net === net && r.len === len) || null;
+    },
+    hasNeighbor: (st, rid, stateStr) => (neighbors[idOf(st)] || []).some(n => n.rid === rid && (!stateStr || n.state === stateStr)),
+    ping: (st, dst, srcRef) => {
+      const from = idOf(st); if (!from) return false;
+      let src = null;
+      if (srcRef) {
+        if (/^\d+\.\d+\.\d+\.\d+$/.test(srcRef)) { if (!ownsIp(st, srcRef)) return false; src = srcRef; }
+        else { const i = st.interfaces[norm(srcRef)]; if (!i || !i.ip || i.shutdown) return false; src = i.ip; }
+      }
+      const fwd = path(from, dst, src);
+      if (!fwd.ok) return false;
+      const back = path(fwd.end, fwd.srcIp);
+      return back.ok && back.end === from;
+    }
+  };
+}
+
+function doPing(state, t) {
+  if (!t[1]) return { output: ['% Incomplete command.'] };
+  const dst = t[1];
+  if (!isValidIp(dst)) return { output: ['% Unrecognized host or address, or protocol not running.'] };
+  const src = (t[2] && matches(t[2], 'source', 3) && t[3]) ? t[3] : null;
+  const sim = currentSim();
+  const ok = sim ? sim.ping(state, dst, src) : Object.keys(state.interfaces).some(n => state.interfaces[n].ip === dst && !state.interfaces[n].shutdown);
+  return { output: ['Type escape sequence to abort.', 'Sending 5, 100-byte ICMP Echos to ' + dst + ', timeout is 2 seconds:', ok ? '!!!!!' : '.....',
+    ok ? 'Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms' : 'Success rate is 0 percent (0/5)'] };
+}
+
+function shortIf(n) { return n.replace('GigabitEthernet', 'Gi').replace('FastEthernet', 'Fa').replace('Loopback', 'Lo').replace('Serial', 'Se'); }
+
+function showIpRoute(state, filter) {
+  const sim = currentSim();
+  const onlyOspf = filter && matches(filter, 'ospf', 2);
+  const out = ['Codes: C - connected, S - static, O - OSPF, E2 - OSPF external type 2, * - candidate default', ' '];
+  const hasStaticDefault = state.routes.some(r => r.network === '0.0.0.0' && r.mask === '0.0.0.0');
+  if (!onlyOspf) {
+    Object.keys(state.interfaces).forEach(name => {
+      const i = state.interfaces[name];
+      if (i.ip && i.mask && !i.shutdown) out.push('C    ' + simIp(simNet(i.ip, i.mask)) + '/' + simLen(i.mask) + ' is directly connected, ' + name);
+    });
+    state.routes.forEach(r => {
+      out.push((r.network === '0.0.0.0' ? 'S*   0.0.0.0/0' : 'S    ' + r.network + '/' + simLen(r.mask)) + ' [' + (r.ad || 1) + '/0] via ' + r.next);
+    });
+  }
+  if (sim) {
+    sim.routes(state).forEach(r => {
+      if (r.type === 'E2' && hasStaticDefault && !onlyOspf) return;
+      const tag = r.type === 'E2' ? 'O*E2' : 'O   ';
+      r.nextHops.forEach((h, idx) => {
+        const head = idx === 0 ? tag + ' ' + r.prefix + '/' + r.len : ' '.repeat(tag.length + 1 + (r.prefix + '/' + r.len).length);
+        out.push(head + ' [110/' + r.cost + '] via ' + h.ip + ', ' + h.iface);
+      });
+    });
+  }
+  return out;
+}
+
+function showIpOspfNeighbor(state) {
+  const out = ['Neighbor ID     Pri   State           Dead Time   Address         Interface'];
+  const sim = currentSim();
+  if (!sim) { out.push('(neighbor information is only available in multi-router labs)'); return out; }
+  const nb = sim.neighbors(state);
+  if (!nb.length) out.push('(no OSPF neighbors)');
+  nb.forEach(n => out.push(n.rid.padEnd(16) + String(n.pri).padEnd(6) + (n.state + '/' + (n.role === '-' ? '  -' : n.role)).padEnd(16) + '00:00:33'.padEnd(12) + n.address.padEnd(16) + n.iface));
+  return out;
+}
+
+function showIpOspf(state) {
+  if (!state.ospf) return ['% OSPF is not running'];
+  const o = state.ospf;
+  return [' Routing Process "ospf ' + o.processId + '" with ID ' + (simRouterId(state) || '(none)'),
+    ' Reference bandwidth unit is ' + (o.refBw || 100) + ' mbps',
+    ' Maximum paths: ' + (o.maxPaths || 4),
+    o.defaultOriginate ? ' Originating a default route' + (o.defaultOriginate === 'always' ? ' (always)' : '') : ' Not originating a default route'];
+}
+
+function showIpOspfInterfaceBrief(state) {
+  const out = ['Interface    PID   Area     IP Address/Mask       Cost  State Nbrs F/C'];
+  if (!state.ospf) { out.push('% OSPF is not running'); return out; }
+  const ifs = simOspfIfaces(state); const sim = currentSim();
+  Object.keys(ifs).forEach(name => {
+    const f = ifs[name];
+    const role = sim ? (sim.ifRole(state, name) || '-') : '-';
+    const nb = sim ? sim.neighbors(state).filter(n => n.iface === name) : [];
+    const full = nb.filter(n => n.state === 'FULL').length;
+    out.push(shortIf(name).padEnd(13) + String(state.ospf.processId).padEnd(6) + f.area.padEnd(9) + (f.ip + '/' + f.len).padEnd(22) + String(f.cost).padEnd(6) + (f.passive && !nb.length ? 'DR' : role).padEnd(6) + full + '/' + nb.length + (f.passive ? '   (passive)' : ''));
+  });
+  if (!Object.keys(ifs).length) out.push('(OSPF is not enabled on any up interface)');
+  return out;
+}
+
+function showIpProtocols(state) {
+  const out = [];
+  if (state.ospf) {
+    out.push('Routing Protocol is "ospf ' + state.ospf.processId + '"');
+    out.push('  Router ID ' + (simRouterId(state) || '(not set)'));
+    out.push('  Reference bandwidth unit is ' + (state.ospf.refBw || 100) + ' mbps');
+    state.ospf.networks.forEach(n => out.push('  Network ' + n.network + ' ' + n.wildcard + ' Area ' + n.area));
+    if (state.ospf.passiveDefault) out.push('  Passive Interface(s): all except ' + ((state.ospf.activeInterfaces || []).join(', ') || '(none)'));
+    else if (state.ospf.passiveInterfaces.length) out.push('  Passive Interface(s): ' + state.ospf.passiveInterfaces.join(', '));
+    if (state.ospf.defaultOriginate) out.push('  Originating a default route');
+    if (state.ospf.redistribute.length) out.push('  Redistributing: ' + state.ospf.redistribute.join(', '));
+  }
+  if (state.eigrp) {
+    out.push('Routing Protocol is "eigrp ' + state.eigrp.as + '"');
+    state.eigrp.networks.forEach(n => out.push('  Network ' + n.network + (n.wildcard ? ' ' + n.wildcard : '')));
+    out.push('  Automatic network summarization is ' + (state.eigrp.noAutoSummary ? 'not in effect' : 'in effect'));
+  }
+  if (!state.ospf && !state.eigrp) out.push('% No routing protocol is configured');
+  return out;
+}
+
 function dispatchShow(state, t) {
   if (!t[1]) return { output: ['% Incomplete command.'] };
   if (matches(t[1], 'running-config', 3)) return { output: synthRunningConfig(state) };
   if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'interface', 3) && t[3] && matches(t[3], 'brief', 3)) return { output: showIpIntBrief(state) };
-  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'route', 3)) return { output: showIpRoute(state) };
+  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'route', 3)) return { output: showIpRoute(state, t[3]) };
   if (matches(t[1], 'vlan', 3) && t[2] && matches(t[2], 'brief', 3)) return { output: showVlanBrief(state) };
   if (matches(t[1], 'interfaces', 4) && t[2] && matches(t[2], 'trunk', 3)) return { output: showInterfacesTrunk(state) };
   if (matches(t[1], 'interfaces', 4) && t[2] && matches(t[2], 'status', 4)) return { output: showInterfacesStatus(state) };
   if (matches(t[1], 'spanning-tree', 8)) return { output: showSpanningTree(state) };
   if (matches(t[1], 'etherchannel', 6) && t[2] && matches(t[2], 'summary', 4)) return { output: showEtherchannelSummary(state) };
+  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'ospf', 2) && !t[3]) return { output: showIpOspf(state) };
+  if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'ospf', 2) && t[3] && matches(t[3], 'neighbor', 3)) return { output: showIpOspfNeighbor(state) };
   if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'ospf', 2) && t[3] && matches(t[3], 'interface', 4) && t[4] && matches(t[4], 'brief', 3)) return { output: showIpOspfInterfaceBrief(state) };
   if (matches(t[1], 'ip', 2) && t[2] && matches(t[2], 'protocols', 6)) return { output: showIpProtocols(state) };
   if (matches(t[1], 'port-security', 6)) return { output: showPortSecurity(state) };
@@ -1381,8 +1813,16 @@ const G = {
   dhcpSnoopingTrusted: (state, ifName) => { const i = G.iface(state, ifName); return !!i && i.dhcpSnoopingTrust === true; },
 
   // --- v4 accessors (OSPF passive/auth/cost, voice VLAN) ---
-  ospfPassiveOn: (state, ifName) => !!state.ospf && state.ospf.passiveInterfaces.includes(normalizeIfName(ifName) || ifName),
-  ospfNotPassiveOn: (state, ifName) => !!state.ospf && !state.ospf.passiveInterfaces.includes(normalizeIfName(ifName) || ifName),
+  ospfPassiveOn: (state, ifName) => !!state.ospf && simIsPassive(state, normalizeIfName(ifName) || ifName),
+  ospfNotPassiveOn: (state, ifName) => !!state.ospf && !simIsPassive(state, normalizeIfName(ifName) || ifName),
+  ospfRefBwIs: (state, mbps) => !!state.ospf && state.ospf.refBw === mbps,
+  ospfPassiveDefaultOn: (state) => !!state.ospf && state.ospf.passiveDefault === true,
+  ospfDefaultOriginateOn: (state) => !!state.ospf && !!state.ospf.defaultOriginate,
+  ifBandwidthIs: (state, ifName, kbps) => { const i = G.iface(state, ifName); return !!i && i.bandwidth === kbps; },
+  ospfHelloIs: (state, ifName, v) => { const i = G.iface(state, ifName); return !!i && i.ospfHello === v; },
+  ospfDeadIs: (state, ifName, v) => { const i = G.iface(state, ifName); return !!i && i.ospfDead === v; },
+  ospfPriorityIs: (state, ifName, v) => { const i = G.iface(state, ifName); return !!i && i.ospfPriority === v; },
+  ospfNetworkTypeIs: (state, ifName, v) => { const i = G.iface(state, ifName); return !!i && i.ospfNetType === v; },
   ospfAuthConfigured: (state, ifName, key) => { const i = G.iface(state, ifName); return !!i && i.ospfAuthEnabled === true && (!key || i.ospfAuthKey === key); },
   ospfCostIs: (state, ifName, cost) => { const i = G.iface(state, ifName); return !!i && i.ospfCost === cost; },
   voiceVlanIs: (state, ifName, vlanId) => { const i = G.iface(state, ifName); return !!i && String(i.voiceVlan) === String(vlanId); }
@@ -1390,7 +1830,7 @@ const G = {
 
 // Export for Node testing; browser will just use the globals directly.
 if (typeof module !== 'undefined') {
-  module.exports = { freshState, freshInterface, newCtx, runCommand, normalizeIfName, G, promptFor };
+  module.exports = { freshState, freshInterface, newCtx, runCommand, normalizeIfName, G, promptFor, simulateOspf, setSimHook };
 }
 
     </script>
@@ -4428,8 +4868,247 @@ buildLab({
 ])
 );
 
-if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
+// ---- Multi-router lab builder (OSPF labs 136-140) ----
+// A multi-router lab lists its `devices` (one console tab each) and the `segments` that
+// connect their interfaces. Each task names the router it is performed on (`dev`); its check
+// receives (thatRouterState, allRouterStates, sim) where `sim` answers neighbor, route and ping questions.
+function tkd(dev, d, m, c, w, p) { return { dev: dev, d: d, m: m, c: c, w: w, p: p || [] }; }
+function buildMultiLab(meta, brief, tasks) {
+  const sol = {};
+  meta.devices.forEach(x => { sol[x.name] = ['enable', 'configure terminal']; });
+  tasks.forEach(t => t.m.forEach(x => sol[t.dev].push(x)));
+  meta.devices.forEach(x => sol[x.name].push('end'));
+  tasks.forEach(t => t.p.forEach(x => sol[t.dev].push(x)));
+  if (typeof LAB_SOLUTIONS !== 'undefined') LAB_SOLUTIONS[meta.id] = sol;
+  return Object.assign({ initial: meta.devices[0].initial }, meta, {
+    requirements: brief,
+    objectives: tasks.map(t => ({ dev: t.dev, desc: t.d, check: t.c, hint: 'On ' + t.dev + ': ' + hintFromCmds(t.m, t.p), why: t.w }))
+  });
+}
+const rdev = (name, label, ifs) => ({ name: name, label: label, initial: () => routerState('Router', ifs) });
+const G0 = 'GigabitEthernet0/0', G1 = 'GigabitEthernet0/1', G2 = 'GigabitEthernet0/2', F0 = 'FastEthernet0/0';
+const W_HOST = "A clear hostname tells you which router you are on. With several routers open at once, a factory name like Router makes it easy to configure the wrong one.";
+const W_RID = "The router-id uniquely identifies this router in the OSPF domain. Setting it explicitly keeps it stable. Otherwise IOS uses the highest loopback address, then the highest interface address, which can change when interfaces change.";
+const W_NET = "OSPF network statements use a wildcard mask (the inverse of the subnet mask): /30 is 0.0.0.3, /24 is 0.0.0.255, and a loopback host is 0.0.0.0. Any up interface inside a statement joins that area and has its network advertised.";
+const W_PASSIVE = "A LAN interface only has hosts on it. Passive still advertises its network but stops OSPF Hellos, which saves overhead and stops anyone on that LAN from forming an OSPF neighbor with the router.";
+const W_LO = "A loopback never goes down with a cable, so it makes a stable router identity. OSPF advertises it as a /32 host route.";
+const ifOk = (n, ip, m) => s => G.hasIp(s, n, ip, m) && G.isUp(s, n);
+const nbrs = (...rids) => (s, all, sim) => rids.every(r => sim.hasNeighbor(s, r, 'FULL'));
+const route = (s, sim, cidr, hop, cost) => { const r = sim.routeFor(s, cidr); return !!r && r.cost === cost && r.nextHops.some(h => h.ip === hop); };
 
+LABS.push(
+buildMultiLab({
+  id: 136, title: 'OSPF Basics: Three-Router Triangle', difficulty: 'Medium', domain: 'IP Connectivity', est: 50,
+  scenario: 'Three routers form a triangle and each has a user LAN and a loopback. Starting from factory configurations, name each router, address every interface, start OSPF with explicit router-ids, advertise the right networks, keep Hellos off the LANs, and then prove it works with neighbor, route, and ping checks. Use the tabs above the terminal to move between the routers.',
+  devices: [rdev('R1', 'R1 (HQ)', [G0, G1, G2]), rdev('R2', 'R2', [G0, G1, G2]), rdev('R3', 'R3', [G0, G1, G2])],
+  segments: [[{ d: 'R1', i: G0 }, { d: 'R2', i: G0 }], [{ d: 'R1', i: G1 }, { d: 'R3', i: G0 }], [{ d: 'R2', i: G1 }, { d: 'R3', i: G1 }]]
+}, [
+  'Links: R1-R2 10.0.12.0/30 (R1 .1, R2 .2), R1-R3 10.0.13.0/30 (R1 .1, R3 .2), R2-R3 10.0.23.0/30 (R2 .1, R3 .2).',
+  'Ports: Gi0/0 and Gi0/1 are the links (Gi0/0 on R1 goes to R2, Gi0/1 on R1 goes to R3; R2 Gi0/0 to R1, Gi0/1 to R3; R3 Gi0/0 to R1, Gi0/1 to R2). Gi0/2 is the LAN.',
+  'LANs: R1 192.168.1.0/24, R2 192.168.2.0/24, R3 192.168.3.0/24 (router is .1). Loopback0: 1.1.1.1, 2.2.2.2, 3.3.3.3 (/32).',
+  'OSPF process 1, Area 0, router-id equal to the loopback address. Default costs apply (reference bandwidth 100).'
+], [
+  tkd('R1', 'Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), W_HOST),
+  tkd('R1', 'Gi0/0 (to R2) is 10.0.12.1/30 and Gi0/1 (to R3) is 10.0.13.1/30, both up', ['interface gi0/0', 'description TO-R2', 'ip address 10.0.12.1 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/1', 'description TO-R3', 'ip address 10.0.13.1 255.255.255.252', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.0.12.1', '255.255.255.252')(s) && ifOk('gi0/1', '10.0.13.1', '255.255.255.252')(s) && G.descriptionSet(s, 'gi0/0') && G.descriptionSet(s, 'gi0/1'), "Point-to-point links use /30 subnets, which hold exactly two routers. OSPF can only run on interfaces that are up and addressed, and router interfaces start shut down."),
+  tkd('R1', 'Gi0/2 (LAN) is 192.168.1.1/24 and up', ['interface gi0/2', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit'], ifOk('gi0/2', '192.168.1.1', '255.255.255.0'), "The LAN interface is the gateway for hosts and the network OSPF will advertise for them."),
+  tkd('R1', 'Loopback0 is 1.1.1.1/32 and up', ['interface loopback0', 'ip address 1.1.1.1 255.255.255.255', 'no shutdown', 'exit'], ifOk('Loopback0', '1.1.1.1', '255.255.255.255'), W_LO),
+  tkd('R2', 'Hostname is R2', ['hostname R2'], s => G.hostnameIs(s, 'R2'), W_HOST),
+  tkd('R2', 'Gi0/0 (to R1) is 10.0.12.2/30 and Gi0/1 (to R3) is 10.0.23.1/30, both up', ['interface gi0/0', 'description TO-R1', 'ip address 10.0.12.2 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/1', 'description TO-R3', 'ip address 10.0.23.1 255.255.255.252', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.0.12.2', '255.255.255.252')(s) && ifOk('gi0/1', '10.0.23.1', '255.255.255.252')(s) && G.descriptionSet(s, 'gi0/0') && G.descriptionSet(s, 'gi0/1'), "Both ends of a link must be in the same subnet. R2 takes .2 on the R1 link and .1 on the R3 link."),
+  tkd('R2', 'Gi0/2 (LAN) is 192.168.2.1/24 and up', ['interface gi0/2', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit'], ifOk('gi0/2', '192.168.2.1', '255.255.255.0'), "Each LAN is its own subnet with its own gateway."),
+  tkd('R2', 'Loopback0 is 2.2.2.2/32 and up', ['interface loopback0', 'ip address 2.2.2.2 255.255.255.255', 'no shutdown', 'exit'], ifOk('Loopback0', '2.2.2.2', '255.255.255.255'), W_LO),
+  tkd('R3', 'Hostname is R3', ['hostname R3'], s => G.hostnameIs(s, 'R3'), W_HOST),
+  tkd('R3', 'Gi0/0 (to R1) is 10.0.13.2/30 and Gi0/1 (to R2) is 10.0.23.2/30, both up', ['interface gi0/0', 'description TO-R1', 'ip address 10.0.13.2 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/1', 'description TO-R2', 'ip address 10.0.23.2 255.255.255.252', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.0.13.2', '255.255.255.252')(s) && ifOk('gi0/1', '10.0.23.2', '255.255.255.252')(s) && G.descriptionSet(s, 'gi0/0') && G.descriptionSet(s, 'gi0/1'), "R3 takes .2 on both links, matching R1's .1 and R2's .1 on the far ends."),
+  tkd('R3', 'Gi0/2 (LAN) is 192.168.3.1/24 and up', ['interface gi0/2', 'ip address 192.168.3.1 255.255.255.0', 'no shutdown', 'exit'], ifOk('gi0/2', '192.168.3.1', '255.255.255.0'), "The third LAN completes the address plan."),
+  tkd('R3', 'Loopback0 is 3.3.3.3/32 and up', ['interface loopback0', 'ip address 3.3.3.3 255.255.255.255', 'no shutdown', 'exit'], ifOk('Loopback0', '3.3.3.3', '255.255.255.255'), W_LO),
+  tkd('R1', 'OSPF process 1 runs with router-id 1.1.1.1', ['router ospf 1', 'router-id 1.1.1.1', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1'), W_RID),
+  tkd('R2', 'OSPF process 1 runs with router-id 2.2.2.2', ['router ospf 1', 'router-id 2.2.2.2', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '2.2.2.2'), W_RID),
+  tkd('R3', 'OSPF process 1 runs with router-id 3.3.3.3', ['router ospf 1', 'router-id 3.3.3.3', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '3.3.3.3'), W_RID),
+  tkd('R1', 'R1 advertises 10.0.12.0/30, 10.0.13.0/30, 192.168.1.0/24, and 1.1.1.1 in Area 0', ['router ospf 1', 'network 10.0.12.0 0.0.0.3 area 0', 'network 10.0.13.0 0.0.0.3 area 0', 'network 192.168.1.0 0.0.0.255 area 0', 'network 1.1.1.1 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.12.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '10.0.13.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '1.1.1.1', '0.0.0.0', 0), W_NET),
+  tkd('R2', 'R2 advertises 10.0.12.0/30, 10.0.23.0/30, 192.168.2.0/24, and 2.2.2.2 in Area 0', ['router ospf 1', 'network 10.0.12.0 0.0.0.3 area 0', 'network 10.0.23.0 0.0.0.3 area 0', 'network 192.168.2.0 0.0.0.255 area 0', 'network 2.2.2.2 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.12.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '10.0.23.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '2.2.2.2', '0.0.0.0', 0), "Both link subnets must be advertised or the neighbors on those links cannot form. All routers in a single-area design use the same area number."),
+  tkd('R3', 'R3 advertises 10.0.13.0/30, 10.0.23.0/30, 192.168.3.0/24, and 3.3.3.3 in Area 0', ['router ospf 1', 'network 10.0.13.0 0.0.0.3 area 0', 'network 10.0.23.0 0.0.0.3 area 0', 'network 192.168.3.0 0.0.0.255 area 0', 'network 3.3.3.3 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.13.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '10.0.23.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.3.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '3.3.3.3', '0.0.0.0', 0), "A network left out is simply never advertised, so other routers have no route to it even though the interface is up."),
+  tkd('R1', 'Gi0/2 is a passive OSPF interface', ['router ospf 1', 'passive-interface gi0/2', 'exit'], s => G.ospfPassiveOn(s, 'gi0/2'), W_PASSIVE),
+  tkd('R2', 'Gi0/2 is a passive OSPF interface', ['router ospf 1', 'passive-interface gi0/2', 'exit'], s => G.ospfPassiveOn(s, 'gi0/2'), W_PASSIVE),
+  tkd('R3', 'Gi0/2 is a passive OSPF interface', ['router ospf 1', 'passive-interface gi0/2', 'exit'], s => G.ospfPassiveOn(s, 'gi0/2'), W_PASSIVE),
+  tkd('R1', 'R1 has FULL adjacencies with 2.2.2.2 and 3.3.3.3 (show ip ospf neighbor)', [], nbrs('2.2.2.2', '3.3.3.3'), "Run show ip ospf neighbor. Neighbors reach FULL only when both ends are up, in the same subnet and area, with matching Hello and dead timers. On a point-to-point style link the other router is shown as FULL with no DR role."),
+  tkd('R2', 'R2 has FULL adjacencies with 1.1.1.1 and 3.3.3.3', [], nbrs('1.1.1.1', '3.3.3.3'), "If a neighbor is missing, check the network statement on both ends of that link and that neither side marked the interface passive."),
+  tkd('R3', 'R3 has FULL adjacencies with 1.1.1.1 and 2.2.2.2', [], nbrs('1.1.1.1', '2.2.2.2'), "All three adjacencies must be up for the triangle to give each router two paths to every destination."),
+  tkd('R1', 'R1 reaches 192.168.2.0/24 and 192.168.3.0/24 with cost 2 through the direct neighbors', [], (s, all, sim) => route(s, sim, '192.168.2.0/24', '10.0.12.2', 2) && route(s, sim, '192.168.3.0/24', '10.0.13.2', 2), "OSPF cost is the sum of the outgoing interface costs along the path. With the default reference bandwidth every link here costs 1, so a remote LAN is the link (1) plus the LAN interface (1) = 2. Check it with show ip route ospf."),
+  tkd('R2', 'R2 reaches 192.168.3.0/24 via R3 and 1.1.1.1/32 via R1, both with cost 2', [], (s, all, sim) => route(s, sim, '192.168.3.0/24', '10.0.23.2', 2) && route(s, sim, '1.1.1.1/32', '10.0.12.1', 2), "The direct link is always cheaper than going around the triangle, which would add another link cost. A loopback is advertised as a /32, so its route shows a /32 mask."),
+  tkd('R3', 'R3 learns the loopbacks 1.1.1.1/32 and 2.2.2.2/32', [], (s, all, sim) => !!sim.routeFor(s, '1.1.1.1/32') && !!sim.routeFor(s, '2.2.2.2/32'), "Loopbacks were included in the network statements, so every router learns every other router's loopback."),
+  tkd('R1', 'R1 can ping 3.3.3.3 and 192.168.2.1 (end-to-end connectivity)', [], (s, all, sim) => sim.ping(s, '3.3.3.3') && sim.ping(s, '192.168.2.1'), "A ping only succeeds if the request and the reply both have routes. That is why every router has to advertise its networks: the reply needs a route back.")
+]),
+
+buildMultiLab({
+  id: 137, title: 'OSPF Reference Bandwidth and Cost Tuning', difficulty: 'Hard', domain: 'IP Connectivity', est: 55,
+  scenario: 'R1 and R3 are joined by a slow FastEthernet link, and both also have Gigabit paths through R2. With the default reference bandwidth of 100 Mbps, OSPF cannot tell Gigabit from FastEthernet (both cost 1) and picks the slow link. Build the network, fix the reference bandwidth on every router, then use manual costs and the bandwidth command to steer traffic exactly as required, and verify the resulting costs.',
+  devices: [rdev('R1', 'R1', [F0, G0, G2]), rdev('R2', 'R2', [G0, G1, G2]), rdev('R3', 'R3', [F0, G1, G2])],
+  segments: [[{ d: 'R1', i: F0 }, { d: 'R3', i: F0 }], [{ d: 'R1', i: G0 }, { d: 'R2', i: G0 }], [{ d: 'R2', i: G1 }, { d: 'R3', i: G1 }]]
+}, [
+  'Links: R1 Fa0/0 - R3 Fa0/0 10.0.13.0/30 (R1 .1, R3 .2). R1 Gi0/0 - R2 Gi0/0 10.0.12.0/30 (R1 .1, R2 .2). R2 Gi0/1 - R3 Gi0/1 10.0.23.0/30 (R2 .1, R3 .2).',
+  'LANs on Gi0/2: R1 192.168.1.0/24, R2 192.168.2.0/24, R3 192.168.3.0/24 (router is .1). Loopback0: 1.1.1.1, 2.2.2.2, 3.3.3.3 (/32). OSPF process 1, Area 0.',
+  'Use reference bandwidth 10000 on all three routers. Then set cost 15 on both ends of the FastEthernet link, and tell the Gi0/1 link between R2 and R3 that it is a 500 Mbps link.',
+  'Expected costs: Gigabit = 10, FastEthernet = 100 (until overridden). cost = reference bandwidth / interface bandwidth.'
+], [
+  tkd('R1', 'Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), W_HOST),
+  tkd('R2', 'Hostname is R2', ['hostname R2'], s => G.hostnameIs(s, 'R2'), W_HOST),
+  tkd('R3', 'Hostname is R3', ['hostname R3'], s => G.hostnameIs(s, 'R3'), W_HOST),
+  tkd('R1', 'Fa0/0 is 10.0.13.1/30 and Gi0/0 is 10.0.12.1/30, both up', ['interface fa0/0', 'ip address 10.0.13.1 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/0', 'ip address 10.0.12.1 255.255.255.252', 'no shutdown', 'exit'], s => ifOk('fa0/0', '10.0.13.1', '255.255.255.252')(s) && ifOk('gi0/0', '10.0.12.1', '255.255.255.252')(s), "R1 has one slow path (FastEthernet to R3) and one fast path (Gigabit to R2). Both links must be addressed and up before OSPF can use them."),
+  tkd('R1', 'Gi0/2 (LAN) is 192.168.1.1/24 and up', ['interface gi0/2', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit'], ifOk('gi0/2', '192.168.1.1', '255.255.255.0'), "The LAN is a Gigabit interface, so its cost will be part of every path total."),
+  tkd('R1', 'Loopback0 is 1.1.1.1/32 and up', ['interface loopback0', 'ip address 1.1.1.1 255.255.255.255', 'no shutdown', 'exit'], ifOk('Loopback0', '1.1.1.1', '255.255.255.255'), W_LO),
+  tkd('R2', 'Gi0/0 is 10.0.12.2/30 and Gi0/1 is 10.0.23.1/30, both up', ['interface gi0/0', 'ip address 10.0.12.2 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 10.0.23.1 255.255.255.252', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.0.12.2', '255.255.255.252')(s) && ifOk('gi0/1', '10.0.23.1', '255.255.255.252')(s), "R2 is the Gigabit path between R1 and R3."),
+  tkd('R2', 'Gi0/2 (LAN) is 192.168.2.1/24 and up', ['interface gi0/2', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit'], ifOk('gi0/2', '192.168.2.1', '255.255.255.0'), "The middle LAN."),
+  tkd('R2', 'Loopback0 is 2.2.2.2/32 and up', ['interface loopback0', 'ip address 2.2.2.2 255.255.255.255', 'no shutdown', 'exit'], ifOk('Loopback0', '2.2.2.2', '255.255.255.255'), W_LO),
+  tkd('R3', 'Fa0/0 is 10.0.13.2/30 and Gi0/1 is 10.0.23.2/30, both up', ['interface fa0/0', 'ip address 10.0.13.2 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 10.0.23.2 255.255.255.252', 'no shutdown', 'exit'], s => ifOk('fa0/0', '10.0.13.2', '255.255.255.252')(s) && ifOk('gi0/1', '10.0.23.2', '255.255.255.252')(s), "R3 also has one FastEthernet and one Gigabit link."),
+  tkd('R3', 'Gi0/2 (LAN) is 192.168.3.1/24 and up', ['interface gi0/2', 'ip address 192.168.3.1 255.255.255.0', 'no shutdown', 'exit'], ifOk('gi0/2', '192.168.3.1', '255.255.255.0'), "The destination LAN used in the path checks later."),
+  tkd('R3', 'Loopback0 is 3.3.3.3/32 and up', ['interface loopback0', 'ip address 3.3.3.3 255.255.255.255', 'no shutdown', 'exit'], ifOk('Loopback0', '3.3.3.3', '255.255.255.255'), W_LO),
+  tkd('R1', 'OSPF process 1 runs with router-id 1.1.1.1', ['router ospf 1', 'router-id 1.1.1.1', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1'), W_RID),
+  tkd('R2', 'OSPF process 1 runs with router-id 2.2.2.2', ['router ospf 1', 'router-id 2.2.2.2', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '2.2.2.2'), W_RID),
+  tkd('R3', 'OSPF process 1 runs with router-id 3.3.3.3', ['router ospf 1', 'router-id 3.3.3.3', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '3.3.3.3'), W_RID),
+  tkd('R1', 'R1 advertises both links, the LAN, and 1.1.1.1 in Area 0', ['router ospf 1', 'network 10.0.13.0 0.0.0.3 area 0', 'network 10.0.12.0 0.0.0.3 area 0', 'network 192.168.1.0 0.0.0.255 area 0', 'network 1.1.1.1 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.13.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '10.0.12.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '1.1.1.1', '0.0.0.0', 0), W_NET),
+  tkd('R2', 'R2 advertises both links, the LAN, and 2.2.2.2 in Area 0', ['router ospf 1', 'network 10.0.12.0 0.0.0.3 area 0', 'network 10.0.23.0 0.0.0.3 area 0', 'network 192.168.2.0 0.0.0.255 area 0', 'network 2.2.2.2 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.12.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '10.0.23.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '2.2.2.2', '0.0.0.0', 0), W_NET),
+  tkd('R3', 'R3 advertises both links, the LAN, and 3.3.3.3 in Area 0', ['router ospf 1', 'network 10.0.13.0 0.0.0.3 area 0', 'network 10.0.23.0 0.0.0.3 area 0', 'network 192.168.3.0 0.0.0.255 area 0', 'network 3.3.3.3 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.13.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '10.0.23.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.3.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '3.3.3.3', '0.0.0.0', 0), W_NET),
+  tkd('R1', 'R1 reference bandwidth is 10000 Mbps', ['router ospf 1', 'auto-cost reference-bandwidth 10000', 'exit'], s => G.ospfRefBwIs(s, 10000), "OSPF cost is reference bandwidth divided by interface bandwidth. With the default 100 Mbps, FastEthernet, Gigabit, and 10 Gigabit all cost 1, so OSPF cannot tell them apart. Raising the reference to 10000 Mbps gives Gigabit a cost of 10 and FastEthernet 100."),
+  tkd('R2', 'R2 reference bandwidth is 10000 Mbps', ['router ospf 1', 'auto-cost reference-bandwidth 10000', 'exit'], s => G.ospfRefBwIs(s, 10000), "The reference bandwidth is not advertised, so it must be set to the same value on every router. A mismatch gives routers inconsistent views of path cost."),
+  tkd('R3', 'R3 reference bandwidth is 10000 Mbps', ['router ospf 1', 'auto-cost reference-bandwidth 10000', 'exit'], s => G.ospfRefBwIs(s, 10000), "The third router completes the consistent setting."),
+  tkd('R1', 'R1 Fa0/0 has a manual OSPF cost of 15', ['interface fa0/0', 'ip ospf cost 15', 'exit'], s => G.ospfCostIs(s, 'fa0/0', 15), "A manual cost overrides the calculated one. Cost is applied to the outgoing interface, so to influence the path in both directions, set it on both ends of the link."),
+  tkd('R3', 'R3 Fa0/0 has a manual OSPF cost of 15', ['interface fa0/0', 'ip ospf cost 15', 'exit'], s => G.ospfCostIs(s, 'fa0/0', 15), "The far end of the same link. Without it, traffic from R3 toward R1 would still use the calculated cost of 100."),
+  tkd('R2', 'R2 Gi0/1 is declared as a 500 Mbps link (bandwidth 500000)', ['interface gi0/1', 'bandwidth 500000', 'exit'], s => G.ifBandwidthIs(s, 'gi0/1', 500000), "The bandwidth command does not change the real speed. It only tells IOS (and OSPF) what to assume, which is useful for links that are subrate, such as a 500 Mbps WAN service on a Gigabit port. The value is in kilobits: 500000 kbps = 500 Mbps."),
+  tkd('R3', 'R3 Gi0/1 is declared as a 500 Mbps link (bandwidth 500000)', ['interface gi0/1', 'bandwidth 500000', 'exit'], s => G.ifBandwidthIs(s, 'gi0/1', 500000), "Set it on both ends so each side computes the same cost for the link."),
+  tkd('R1', 'R1 OSPF costs: Gi0/0 = 10, Gi0/2 = 10, Fa0/0 = 15', [], (s, all, sim) => sim.ifCost(s, 'gi0/0') === 10 && sim.ifCost(s, 'gi0/2') === 10 && sim.ifCost(s, 'fa0/0') === 15, "Verify with show ip ospf interface brief. 10000 / 1000 Mbps = 10 for Gigabit, and the manual value 15 replaces the calculated 100 on FastEthernet."),
+  tkd('R2', 'R2 Gi0/1 OSPF cost is 20 (10000 / 500)', [], (s, all, sim) => sim.ifCost(s, 'gi0/1') === 20, "10000 Mbps reference divided by 500 Mbps bandwidth = 20. Changing the bandwidth statement changes the cost automatically."),
+  tkd('R1', 'R1 reaches 192.168.3.0/24 via R3 (10.0.13.2) with cost 25', [], (s, all, sim) => route(s, sim, '192.168.3.0/24', '10.0.13.2', 25), "Direct path: Fa0/0 cost 15 + R3 LAN cost 10 = 25. The path through R2 would cost 10 + 20 + 10 = 40, so the direct link now wins even though it is the slower one."),
+  tkd('R2', 'R2 reaches 192.168.3.0/24 via R3 (10.0.23.2) with cost 30', [], (s, all, sim) => route(s, sim, '192.168.3.0/24', '10.0.23.2', 30), "Via R3: Gi0/1 cost 20 + LAN 10 = 30. Via R1 it would be 10 + 15 + 10 = 35, so R2 goes straight to R3."),
+  tkd('R3', 'R3 reaches 192.168.1.0/24 via R1 (10.0.13.1) with cost 25', [], (s, all, sim) => route(s, sim, '192.168.1.0/24', '10.0.13.1', 25), "Mirror of R1's result: Fa0/0 cost 15 + R1 LAN 10 = 25, against 20 + 10 + 10 = 40 through R2.")
+]),
+
+buildMultiLab({
+  id: 138, title: 'OSPF DR/BDR Election and Network Types', difficulty: 'Hard', domain: 'IP Connectivity', est: 60,
+  scenario: 'Four routers share one Ethernet segment, so OSPF elects a Designated Router and a Backup. Left to defaults, the router with the highest router-id wins, which is rarely the router you want. Build the network, control the election with priorities, and then turn a Gigabit link between two routers into a point-to-point link where no election happens. Verify the roles with the simulator.',
+  devices: [rdev('R1', 'R1', [G0, G2]), rdev('R2', 'R2', [G0, G2]), rdev('R3', 'R3', [G0, G1, G2]), rdev('R4', 'R4', [G0, G1, G2])],
+  segments: [[{ d: 'R1', i: G0 }, { d: 'R2', i: G0 }, { d: 'R3', i: G0 }, { d: 'R4', i: G0 }], [{ d: 'R3', i: G1 }, { d: 'R4', i: G1 }]]
+}, [
+  'Shared segment 172.16.0.0/24 on Gi0/0 of all four routers: R1 .1, R2 .2, R3 .3, R4 .4. Point-to-point link R3 Gi0/1 - R4 Gi0/1: 10.0.34.0/30 (R3 .1, R4 .2).',
+  'LANs on Gi0/2: R1 192.168.1.0/24, R2 192.168.2.0/24, R3 192.168.3.0/24, R4 192.168.4.0/24 (router is .1). Router-ids 1.1.1.1 through 4.4.4.4. OSPF process 1, Area 0.',
+  'Election goal on 172.16.0.0/24: R1 is the DR (priority 200), R2 is the BDR (priority 100), R3 can never be DR (priority 0), R4 keeps the default priority 1.',
+  'The R3-R4 link must be a point-to-point network type on both ends.'
+], [
+  tkd('R1', 'Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), W_HOST),
+  tkd('R2', 'Hostname is R2', ['hostname R2'], s => G.hostnameIs(s, 'R2'), W_HOST),
+  tkd('R3', 'Hostname is R3', ['hostname R3'], s => G.hostnameIs(s, 'R3'), W_HOST),
+  tkd('R4', 'Hostname is R4', ['hostname R4'], s => G.hostnameIs(s, 'R4'), W_HOST),
+  tkd('R1', 'Gi0/0 is 172.16.0.1/24 and Gi0/2 (LAN) is 192.168.1.1/24, both up', ['interface gi0/0', 'ip address 172.16.0.1 255.255.255.0', 'no shutdown', 'exit', 'interface gi0/2', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit'], s => ifOk('gi0/0', '172.16.0.1', '255.255.255.0')(s) && ifOk('gi0/2', '192.168.1.1', '255.255.255.0')(s), "All four routers share 172.16.0.0/24 as one broadcast domain, which is what makes a DR election necessary."),
+  tkd('R2', 'Gi0/0 is 172.16.0.2/24 and Gi0/2 (LAN) is 192.168.2.1/24, both up', ['interface gi0/0', 'ip address 172.16.0.2 255.255.255.0', 'no shutdown', 'exit', 'interface gi0/2', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit'], s => ifOk('gi0/0', '172.16.0.2', '255.255.255.0')(s) && ifOk('gi0/2', '192.168.2.1', '255.255.255.0')(s), "Each router uses its own host address on the shared segment."),
+  tkd('R3', 'Gi0/0 is 172.16.0.3/24, Gi0/1 is 10.0.34.1/30, Gi0/2 (LAN) is 192.168.3.1/24, all up', ['interface gi0/0', 'ip address 172.16.0.3 255.255.255.0', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 10.0.34.1 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/2', 'ip address 192.168.3.1 255.255.255.0', 'no shutdown', 'exit'], s => ifOk('gi0/0', '172.16.0.3', '255.255.255.0')(s) && ifOk('gi0/1', '10.0.34.1', '255.255.255.252')(s) && ifOk('gi0/2', '192.168.3.1', '255.255.255.0')(s), "R3 is on the shared segment and also has a dedicated link to R4."),
+  tkd('R4', 'Gi0/0 is 172.16.0.4/24, Gi0/1 is 10.0.34.2/30, Gi0/2 (LAN) is 192.168.4.1/24, all up', ['interface gi0/0', 'ip address 172.16.0.4 255.255.255.0', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 10.0.34.2 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/2', 'ip address 192.168.4.1 255.255.255.0', 'no shutdown', 'exit'], s => ifOk('gi0/0', '172.16.0.4', '255.255.255.0')(s) && ifOk('gi0/1', '10.0.34.2', '255.255.255.252')(s) && ifOk('gi0/2', '192.168.4.1', '255.255.255.0')(s), "R4 mirrors R3: the shared segment, the point-to-point link, and a LAN."),
+  tkd('R1', 'OSPF process 1 runs with router-id 1.1.1.1', ['router ospf 1', 'router-id 1.1.1.1', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1'), W_RID + " The router-id is also the tie-breaker in a DR election."),
+  tkd('R2', 'OSPF process 1 runs with router-id 2.2.2.2', ['router ospf 1', 'router-id 2.2.2.2', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '2.2.2.2'), W_RID),
+  tkd('R3', 'OSPF process 1 runs with router-id 3.3.3.3', ['router ospf 1', 'router-id 3.3.3.3', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '3.3.3.3'), W_RID),
+  tkd('R4', 'OSPF process 1 runs with router-id 4.4.4.4', ['router ospf 1', 'router-id 4.4.4.4', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '4.4.4.4'), W_RID + " With all priorities equal, R4 (4.4.4.4) would win the DR election, which is exactly what this lab changes."),
+  tkd('R1', 'R1 advertises 172.16.0.0/24 and 192.168.1.0/24 in Area 0', ['router ospf 1', 'network 172.16.0.0 0.0.0.255 area 0', 'network 192.168.1.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '172.16.0.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), W_NET),
+  tkd('R2', 'R2 advertises 172.16.0.0/24 and 192.168.2.0/24 in Area 0', ['router ospf 1', 'network 172.16.0.0 0.0.0.255 area 0', 'network 192.168.2.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '172.16.0.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0), W_NET),
+  tkd('R3', 'R3 advertises 172.16.0.0/24, 10.0.34.0/30, and 192.168.3.0/24 in Area 0', ['router ospf 1', 'network 172.16.0.0 0.0.0.255 area 0', 'network 10.0.34.0 0.0.0.3 area 0', 'network 192.168.3.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '172.16.0.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '10.0.34.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.3.0', '0.0.0.255', 0), W_NET),
+  tkd('R4', 'R4 advertises 172.16.0.0/24, 10.0.34.0/30, and 192.168.4.0/24 in Area 0', ['router ospf 1', 'network 172.16.0.0 0.0.0.255 area 0', 'network 10.0.34.0 0.0.0.3 area 0', 'network 192.168.4.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '172.16.0.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '10.0.34.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.4.0', '0.0.0.255', 0), W_NET),
+  tkd('R1', 'Gi0/2 is a passive OSPF interface', ['router ospf 1', 'passive-interface gi0/2', 'exit'], s => G.ospfPassiveOn(s, 'gi0/2'), W_PASSIVE),
+  tkd('R2', 'Gi0/2 is a passive OSPF interface', ['router ospf 1', 'passive-interface gi0/2', 'exit'], s => G.ospfPassiveOn(s, 'gi0/2'), W_PASSIVE),
+  tkd('R3', 'Gi0/2 is a passive OSPF interface', ['router ospf 1', 'passive-interface gi0/2', 'exit'], s => G.ospfPassiveOn(s, 'gi0/2'), W_PASSIVE),
+  tkd('R4', 'Gi0/2 is a passive OSPF interface', ['router ospf 1', 'passive-interface gi0/2', 'exit'], s => G.ospfPassiveOn(s, 'gi0/2'), W_PASSIVE),
+  tkd('R1', 'R1 Gi0/0 OSPF priority is 200', ['interface gi0/0', 'ip ospf priority 200', 'exit'], s => G.ospfPriorityIs(s, 'gi0/0', 200), "The DR is the router with the highest priority, with the highest router-id breaking ties. The default priority is 1, so 200 makes R1 the DR. On real routers the election is not preemptive: a DR already in place keeps the role until it fails or you run clear ip ospf process."),
+  tkd('R2', 'R2 Gi0/0 OSPF priority is 100', ['interface gi0/0', 'ip ospf priority 100', 'exit'], s => G.ospfPriorityIs(s, 'gi0/0', 100), "The second-highest priority becomes the Backup DR, ready to take over instantly if the DR fails."),
+  tkd('R3', 'R3 Gi0/0 OSPF priority is 0 (never DR or BDR)', ['interface gi0/0', 'ip ospf priority 0', 'exit'], s => G.ospfPriorityIs(s, 'gi0/0', 0), "Priority 0 makes a router ineligible to be DR or BDR. It is used for routers that are too small or too busy to take on the extra work."),
+  tkd('R3', 'R3 Gi0/1 is a point-to-point OSPF network', ['interface gi0/1', 'ip ospf network point-to-point', 'exit'], s => G.ospfNetworkTypeIs(s, 'gi0/1', 'point-to-point'), "Ethernet defaults to the broadcast network type, which runs a DR election. On a link with only two routers, point-to-point skips the election and forms the adjacency faster."),
+  tkd('R4', 'R4 Gi0/1 is a point-to-point OSPF network', ['interface gi0/1', 'ip ospf network point-to-point', 'exit'], s => G.ospfNetworkTypeIs(s, 'gi0/1', 'point-to-point'), "Both ends of the link should use the same network type."),
+  tkd('R1', 'On 172.16.0.0/24, R1 is the DR and R2 is the BDR', [], (s, all, sim) => sim.ifRole(s, 'gi0/0') === 'DR' && sim.ifRole(all.R2, 'gi0/0') === 'BDR', "Verify with show ip ospf neighbor: the roles appear next to each neighbor, such as FULL/DR and FULL/BDR. Priority was used instead of router-id to pick the winners."),
+  tkd('R3', 'R3 and R4 are DROTHER; their adjacency on the shared segment stays 2WAY', [], (s, all, sim) => sim.ifRole(s, 'gi0/0') === 'DROTHER' && sim.ifRole(all.R4, 'gi0/0') === 'DROTHER' && sim.neighbors(s).some(n => n.rid === '4.4.4.4' && n.iface === G0 && n.state === '2WAY'), "Routers that are neither DR nor BDR only form a full adjacency with the DR and BDR. Between two DROTHERs the state stays 2WAY, and that is normal, not a fault."),
+  tkd('R3', 'The R3-R4 link is point-to-point: FULL adjacency with no DR or BDR', [], (s, all, sim) => sim.ifRole(s, 'gi0/1') === 'P2P' && sim.neighbors(s).some(n => n.rid === '4.4.4.4' && n.iface === G1 && n.state === 'FULL' && n.role === '-'), "On a point-to-point link there is no election, so the neighbor is shown as FULL with a dash instead of a DR role."),
+  tkd('R1', 'R1 can ping the R4 LAN gateway 192.168.4.1', [], (s, all, sim) => sim.ping(s, '192.168.4.1'), "End-to-end test. It passes only if every router advertises its LAN and the adjacencies with the DR and BDR are in place."),
+  tkd('R4', 'R4 reaches 192.168.1.0/24 via R1 (172.16.0.1) with cost 2', [], (s, all, sim) => route(s, sim, '192.168.1.0/24', '172.16.0.1', 2), "R4 sends traffic straight to R1 across the shared segment (cost 1 + LAN 1). OSPF models the segment as one network, so a DROTHER reaches its neighbors directly even though they only exchange LSAs through the DR.")
+]),
+
+buildMultiLab({
+  id: 139, title: 'OSPF Passive Interfaces, Default Route, Timers, and Authentication', difficulty: 'Hard', domain: 'IP Connectivity', est: 55,
+  scenario: 'R1 is the edge router with a link to the ISP, R2 is the distribution router, and R3 is a branch. Make passive-interface the default so new interfaces never send OSPF Hellos by accident, then enable OSPF only on the links that need neighbors. Originate a default route from R1, tune the Hello and dead timers on one link, and protect another link with OSPF authentication.',
+  devices: [rdev('R1', 'R1 (edge)', [G0, G1, G2]), rdev('R2', 'R2', [G0, G1, G2]), rdev('R3', 'R3', [G0, G1])],
+  segments: [[{ d: 'R1', i: G0 }, { d: 'R2', i: G0 }], [{ d: 'R2', i: G1 }, { d: 'R3', i: G0 }]]
+}, [
+  'Links: R1 Gi0/0 - R2 Gi0/0 10.1.12.0/30 (R1 .1, R2 .2). R2 Gi0/1 - R3 Gi0/0 10.1.23.0/30 (R2 .1, R3 .2). ISP link: R1 Gi0/1 203.0.113.2/30 (ISP is .1, not simulated).',
+  'LANs: R1 Gi0/2 192.168.1.0/24, R2 Gi0/2 192.168.2.0/24, R3 Gi0/1 192.168.3.0/24 (router is .1). Loopback0: 1.1.1.1, 2.2.2.2, 3.3.3.3 (/32). OSPF process 1, Area 0.',
+  'Use passive-interface default on every router, then no passive-interface only on the OSPF links. R1 has a static default route to the ISP and advertises it with default-information originate.',
+  'The R2-R3 link uses Hello 5 and dead 20 on both ends. The R1-R2 link uses OSPF authentication with key CcnaKey1 on both ends.'
+], [
+  tkd('R1', 'Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), W_HOST),
+  tkd('R2', 'Hostname is R2', ['hostname R2'], s => G.hostnameIs(s, 'R2'), W_HOST),
+  tkd('R3', 'Hostname is R3', ['hostname R3'], s => G.hostnameIs(s, 'R3'), W_HOST),
+  tkd('R1', 'Gi0/0 is 10.1.12.1/30 and Gi0/1 (ISP) is 203.0.113.2/30, both up', ['interface gi0/0', 'ip address 10.1.12.1 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 203.0.113.2 255.255.255.252', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.1.12.1', '255.255.255.252')(s) && ifOk('gi0/1', '203.0.113.2', '255.255.255.252')(s), "The edge router has an internal link to R2 and an external link to the ISP. The ISP link is not part of OSPF."),
+  tkd('R2', 'Gi0/0 is 10.1.12.2/30 and Gi0/1 is 10.1.23.1/30, both up', ['interface gi0/0', 'ip address 10.1.12.2 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 10.1.23.1 255.255.255.252', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.1.12.2', '255.255.255.252')(s) && ifOk('gi0/1', '10.1.23.1', '255.255.255.252')(s), "R2 sits in the middle with a link to each neighbor."),
+  tkd('R3', 'Gi0/0 is 10.1.23.2/30 and up', ['interface gi0/0', 'ip address 10.1.23.2 255.255.255.252', 'no shutdown', 'exit'], ifOk('gi0/0', '10.1.23.2', '255.255.255.252'), "The branch router has one uplink."),
+  tkd('R1', 'Gi0/2 is 192.168.1.1/24 and Loopback0 is 1.1.1.1/32, both up', ['interface gi0/2', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit', 'interface loopback0', 'ip address 1.1.1.1 255.255.255.255', 'no shutdown', 'exit'], s => ifOk('gi0/2', '192.168.1.1', '255.255.255.0')(s) && ifOk('Loopback0', '1.1.1.1', '255.255.255.255')(s), W_LO),
+  tkd('R2', 'Gi0/2 is 192.168.2.1/24 and Loopback0 is 2.2.2.2/32, both up', ['interface gi0/2', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit', 'interface loopback0', 'ip address 2.2.2.2 255.255.255.255', 'no shutdown', 'exit'], s => ifOk('gi0/2', '192.168.2.1', '255.255.255.0')(s) && ifOk('Loopback0', '2.2.2.2', '255.255.255.255')(s), W_LO),
+  tkd('R3', 'Gi0/1 is 192.168.3.1/24 and Loopback0 is 3.3.3.3/32, both up', ['interface gi0/1', 'ip address 192.168.3.1 255.255.255.0', 'no shutdown', 'exit', 'interface loopback0', 'ip address 3.3.3.3 255.255.255.255', 'no shutdown', 'exit'], s => ifOk('gi0/1', '192.168.3.1', '255.255.255.0')(s) && ifOk('Loopback0', '3.3.3.3', '255.255.255.255')(s), W_LO),
+  tkd('R1', 'OSPF process 1 runs with router-id 1.1.1.1', ['router ospf 1', 'router-id 1.1.1.1', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1'), W_RID),
+  tkd('R2', 'OSPF process 1 runs with router-id 2.2.2.2', ['router ospf 1', 'router-id 2.2.2.2', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '2.2.2.2'), W_RID),
+  tkd('R3', 'OSPF process 1 runs with router-id 3.3.3.3', ['router ospf 1', 'router-id 3.3.3.3', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '3.3.3.3'), W_RID),
+  tkd('R1', 'R1: passive-interface default, with Gi0/0 re-enabled', ['router ospf 1', 'passive-interface default', 'no passive-interface gi0/0', 'exit'], s => G.ospfPassiveDefaultOn(s) && G.ospfNotPassiveOn(s, 'gi0/0') && G.ospfPassiveOn(s, 'gi0/2'), "passive-interface default makes every interface passive, so only the interfaces you deliberately enable can form neighbors. It is safer than listing each LAN, because a new interface can never leak OSPF Hellos by accident."),
+  tkd('R2', 'R2: passive-interface default, with Gi0/0 and Gi0/1 re-enabled', ['router ospf 1', 'passive-interface default', 'no passive-interface gi0/0', 'no passive-interface gi0/1', 'exit'], s => G.ospfPassiveDefaultOn(s) && G.ospfNotPassiveOn(s, 'gi0/0') && G.ospfNotPassiveOn(s, 'gi0/1') && G.ospfPassiveOn(s, 'gi0/2'), "R2 has two OSPF links, so both must be re-enabled. Forgetting one is the classic cause of a missing neighbor after using passive-interface default."),
+  tkd('R3', 'R3: passive-interface default, with Gi0/0 re-enabled', ['router ospf 1', 'passive-interface default', 'no passive-interface gi0/0', 'exit'], s => G.ospfPassiveDefaultOn(s) && G.ospfNotPassiveOn(s, 'gi0/0') && G.ospfPassiveOn(s, 'gi0/1'), "The branch only needs Hellos on its uplink. The LAN stays passive automatically."),
+  tkd('R1', 'R1 advertises 10.1.12.0/30, 192.168.1.0/24, and 1.1.1.1 in Area 0', ['router ospf 1', 'network 10.1.12.0 0.0.0.3 area 0', 'network 192.168.1.0 0.0.0.255 area 0', 'network 1.1.1.1 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.1.12.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '1.1.1.1', '0.0.0.0', 0), W_NET + " The ISP link is deliberately left out."),
+  tkd('R2', 'R2 advertises both links, 192.168.2.0/24, and 2.2.2.2 in Area 0', ['router ospf 1', 'network 10.1.12.0 0.0.0.3 area 0', 'network 10.1.23.0 0.0.0.3 area 0', 'network 192.168.2.0 0.0.0.255 area 0', 'network 2.2.2.2 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.1.12.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '10.1.23.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '2.2.2.2', '0.0.0.0', 0), W_NET),
+  tkd('R3', 'R3 advertises 10.1.23.0/30, 192.168.3.0/24, and 3.3.3.3 in Area 0', ['router ospf 1', 'network 10.1.23.0 0.0.0.3 area 0', 'network 192.168.3.0 0.0.0.255 area 0', 'network 3.3.3.3 0.0.0.0 area 0', 'exit'], s => G.ospfAdvertises(s, '10.1.23.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.3.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '3.3.3.3', '0.0.0.0', 0), W_NET),
+  tkd('R1', 'R1 has a static default route via the ISP (203.0.113.1)', ['ip route 0.0.0.0 0.0.0.0 203.0.113.1'], s => G.hasDefaultRoute(s, '203.0.113.1'), "The edge router needs its own path to the internet before it can advertise one to anyone else."),
+  tkd('R1', 'R1 originates the default route into OSPF', ['router ospf 1', 'default-information originate', 'exit'], s => G.ospfDefaultOriginateOn(s), "OSPF does not advertise a default route on its own. default-information originate shares R1's default route as an external type 2 route, so R2 and R3 need no default route of their own. It only works while R1 really has a default route, unless you add the always keyword."),
+  tkd('R2', 'R2 Gi0/1 uses Hello 5 and dead 20', ['interface gi0/1', 'ip ospf hello-interval 5', 'ip ospf dead-interval 20', 'exit'], s => G.ospfHelloIs(s, 'gi0/1', 5) && G.ospfDeadIs(s, 'gi0/1', 20), "Hello and dead intervals must match on both ends of a link or the routers will not become neighbors. The default is Hello 10 and dead 40 on Ethernet. A shorter Hello detects a dead neighbor faster."),
+  tkd('R3', 'R3 Gi0/0 uses Hello 5 and dead 20', ['interface gi0/0', 'ip ospf hello-interval 5', 'ip ospf dead-interval 20', 'exit'], s => G.ospfHelloIs(s, 'gi0/0', 5) && G.ospfDeadIs(s, 'gi0/0', 20), "If only one end is changed, the adjacency drops, which is why timer mismatch is such a common OSPF troubleshooting scenario."),
+  tkd('R1', 'R1 Gi0/0 has OSPF authentication with key CcnaKey1', ['interface gi0/0', 'ip ospf authentication', 'ip ospf authentication-key CcnaKey1', 'exit'], s => G.ospfAuthConfigured(s, 'gi0/0', 'CcnaKey1'), "Authentication stops a rogue or misconfigured router from forming an adjacency and injecting routes. The enabling command and the key are separate commands, and both ends need the same key."),
+  tkd('R2', 'R2 Gi0/0 has OSPF authentication with key CcnaKey1', ['interface gi0/0', 'ip ospf authentication', 'ip ospf authentication-key CcnaKey1', 'exit'], s => G.ospfAuthConfigured(s, 'gi0/0', 'CcnaKey1'), "If one side has authentication and the other does not, or the keys differ, the neighbor never reaches FULL."),
+  tkd('R1', 'R1 has a FULL adjacency with 2.2.2.2 (authentication works)', [], nbrs('2.2.2.2'), "Check show ip ospf neighbor. A neighbor stuck out of the table usually means a mismatched key, or one side missing the authentication command."),
+  tkd('R2', 'R2 has FULL adjacencies with 1.1.1.1 and 3.3.3.3 (timers match)', [], nbrs('1.1.1.1', '3.3.3.3'), "Both the authenticated link and the tuned-timer link must be up at the same time."),
+  tkd('R3', 'R3 learns the default route via R2 (10.1.23.1) as an external route', [], (s, all, sim) => { const r = sim.routeFor(s, '0.0.0.0/0'); return !!r && r.type === 'E2' && r.nextHops.some(h => h.ip === '10.1.23.1'); }, "Run show ip route on R3: the default route appears as O*E2 0.0.0.0/0. E2 means external type 2, whose metric does not grow with the internal cost."),
+  tkd('R3', 'R3 can ping R1 loopback 1.1.1.1 (end-to-end connectivity)', [], (s, all, sim) => sim.ping(s, '1.1.1.1'), "A successful ping across both links confirms that authentication, timers, passive interfaces, and network statements all line up.")
+]),
+
+buildMultiLab({
+  id: 140, title: 'OSPF Capstone: Four-Router Enterprise', difficulty: 'Hard', domain: 'Mixed / Capstone', est: 70,
+  scenario: 'The complete OSPF design in one lab. Four routers share one Ethernet segment and one point-to-point link, R1 reaches the ISP, and the design calls for a consistent reference bandwidth, controlled DR/BDR roles, passive-interface default, a point-to-point link, a propagated default route, and a deliberately expensive WAN-style link. Build it from factory configurations and verify it with neighbor, route, and ping checks.',
+  devices: [rdev('R1', 'R1 (edge)', [G0, G1, G2]), rdev('R2', 'R2', [G0, G2]), rdev('R3', 'R3', [G0, G1, G2]), rdev('R4', 'R4', [G0, G1])],
+  segments: [[{ d: 'R1', i: G0 }, { d: 'R2', i: G0 }, { d: 'R3', i: G0 }], [{ d: 'R3', i: G1 }, { d: 'R4', i: G0 }]]
+}, [
+  'Shared segment 10.0.0.0/24 on Gi0/0: R1 .1, R2 .2, R3 .3. Point-to-point link R3 Gi0/1 - R4 Gi0/0: 10.0.34.0/30 (R3 .1, R4 .2). ISP link: R1 Gi0/1 203.0.113.2/30 (ISP .1).',
+  'LANs: R1 Gi0/2 192.168.1.0/24, R2 Gi0/2 192.168.2.0/24, R3 Gi0/2 192.168.3.0/24, R4 Gi0/1 192.168.4.0/24 (router is .1). Router-ids 1.1.1.1 through 4.4.4.4. OSPF process 1, Area 0.',
+  'Reference bandwidth 10000 on every router. passive-interface default on every router, re-enabling only the OSPF links.',
+  'R1 is the DR (priority 200) and R3 never becomes DR (priority 0), so R2 is the BDR. R3-R4 is a point-to-point network type. R3 Gi0/1 has a manual cost of 50. R1 originates the default route.'
+], [
+  tkd('R1', 'Hostname is R1', ['hostname R1'], s => G.hostnameIs(s, 'R1'), W_HOST),
+  tkd('R2', 'Hostname is R2', ['hostname R2'], s => G.hostnameIs(s, 'R2'), W_HOST),
+  tkd('R3', 'Hostname is R3', ['hostname R3'], s => G.hostnameIs(s, 'R3'), W_HOST),
+  tkd('R4', 'Hostname is R4', ['hostname R4'], s => G.hostnameIs(s, 'R4'), W_HOST),
+  tkd('R1', 'Gi0/0 is 10.0.0.1/24, Gi0/1 (ISP) is 203.0.113.2/30, Gi0/2 (LAN) is 192.168.1.1/24, all up', ['interface gi0/0', 'ip address 10.0.0.1 255.255.255.0', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 203.0.113.2 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/2', 'ip address 192.168.1.1 255.255.255.0', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.0.0.1', '255.255.255.0')(s) && ifOk('gi0/1', '203.0.113.2', '255.255.255.252')(s) && ifOk('gi0/2', '192.168.1.1', '255.255.255.0')(s), "The edge router has the shared segment, the ISP link, and its LAN."),
+  tkd('R2', 'Gi0/0 is 10.0.0.2/24 and Gi0/2 (LAN) is 192.168.2.1/24, both up', ['interface gi0/0', 'ip address 10.0.0.2 255.255.255.0', 'no shutdown', 'exit', 'interface gi0/2', 'ip address 192.168.2.1 255.255.255.0', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.0.0.2', '255.255.255.0')(s) && ifOk('gi0/2', '192.168.2.1', '255.255.255.0')(s), "R2 shares the segment and has a LAN."),
+  tkd('R3', 'Gi0/0 is 10.0.0.3/24, Gi0/1 is 10.0.34.1/30, Gi0/2 (LAN) is 192.168.3.1/24, all up', ['interface gi0/0', 'ip address 10.0.0.3 255.255.255.0', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 10.0.34.1 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/2', 'ip address 192.168.3.1 255.255.255.0', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.0.0.3', '255.255.255.0')(s) && ifOk('gi0/1', '10.0.34.1', '255.255.255.252')(s) && ifOk('gi0/2', '192.168.3.1', '255.255.255.0')(s), "R3 connects the shared segment to R4 through a dedicated link."),
+  tkd('R4', 'Gi0/0 is 10.0.34.2/30 and Gi0/1 (LAN) is 192.168.4.1/24, both up', ['interface gi0/0', 'ip address 10.0.34.2 255.255.255.252', 'no shutdown', 'exit', 'interface gi0/1', 'ip address 192.168.4.1 255.255.255.0', 'no shutdown', 'exit'], s => ifOk('gi0/0', '10.0.34.2', '255.255.255.252')(s) && ifOk('gi0/1', '192.168.4.1', '255.255.255.0')(s), "R4 is the branch at the far end of the point-to-point link."),
+  tkd('R1', 'OSPF 1 runs with router-id 1.1.1.1 and reference bandwidth 10000', ['router ospf 1', 'router-id 1.1.1.1', 'auto-cost reference-bandwidth 10000', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '1.1.1.1') && G.ospfRefBwIs(s, 10000), W_RID + " The reference bandwidth must be the same on every router."),
+  tkd('R2', 'OSPF 1 runs with router-id 2.2.2.2 and reference bandwidth 10000', ['router ospf 1', 'router-id 2.2.2.2', 'auto-cost reference-bandwidth 10000', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '2.2.2.2') && G.ospfRefBwIs(s, 10000), "An inconsistent reference bandwidth gives routers different views of path cost, so keep it identical everywhere."),
+  tkd('R3', 'OSPF 1 runs with router-id 3.3.3.3 and reference bandwidth 10000', ['router ospf 1', 'router-id 3.3.3.3', 'auto-cost reference-bandwidth 10000', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '3.3.3.3') && G.ospfRefBwIs(s, 10000), "With reference 10000, every Gigabit interface costs 10."),
+  tkd('R4', 'OSPF 1 runs with router-id 4.4.4.4 and reference bandwidth 10000', ['router ospf 1', 'router-id 4.4.4.4', 'auto-cost reference-bandwidth 10000', 'exit'], s => G.ospfEnabled(s, 1) && G.ospfRouterIdIs(s, '4.4.4.4') && G.ospfRefBwIs(s, 10000), "The last router completes the consistent setting."),
+  tkd('R1', 'R1 advertises 10.0.0.0/24 and 192.168.1.0/24 in Area 0', ['router ospf 1', 'network 10.0.0.0 0.0.0.255 area 0', 'network 192.168.1.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.0.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '192.168.1.0', '0.0.0.255', 0), W_NET + " The ISP link is left out so OSPF never runs toward the provider."),
+  tkd('R2', 'R2 advertises 10.0.0.0/24 and 192.168.2.0/24 in Area 0', ['router ospf 1', 'network 10.0.0.0 0.0.0.255 area 0', 'network 192.168.2.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.0.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '192.168.2.0', '0.0.0.255', 0), W_NET),
+  tkd('R3', 'R3 advertises 10.0.0.0/24, 10.0.34.0/30, and 192.168.3.0/24 in Area 0', ['router ospf 1', 'network 10.0.0.0 0.0.0.255 area 0', 'network 10.0.34.0 0.0.0.3 area 0', 'network 192.168.3.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.0.0', '0.0.0.255', 0) && G.ospfAdvertises(s, '10.0.34.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.3.0', '0.0.0.255', 0), W_NET),
+  tkd('R4', 'R4 advertises 10.0.34.0/30 and 192.168.4.0/24 in Area 0', ['router ospf 1', 'network 10.0.34.0 0.0.0.3 area 0', 'network 192.168.4.0 0.0.0.255 area 0', 'exit'], s => G.ospfAdvertises(s, '10.0.34.0', '0.0.0.3', 0) && G.ospfAdvertises(s, '192.168.4.0', '0.0.0.255', 0), W_NET),
+  tkd('R1', 'R1: passive-interface default, with Gi0/0 re-enabled', ['router ospf 1', 'passive-interface default', 'no passive-interface gi0/0', 'exit'], s => G.ospfPassiveDefaultOn(s) && G.ospfNotPassiveOn(s, 'gi0/0') && G.ospfPassiveOn(s, 'gi0/1') && G.ospfPassiveOn(s, 'gi0/2'), "Only the shared segment needs Hellos. The ISP link and the LAN stay passive, so OSPF never speaks to the provider."),
+  tkd('R2', 'R2: passive-interface default, with Gi0/0 re-enabled', ['router ospf 1', 'passive-interface default', 'no passive-interface gi0/0', 'exit'], s => G.ospfPassiveDefaultOn(s) && G.ospfNotPassiveOn(s, 'gi0/0') && G.ospfPassiveOn(s, 'gi0/2'), "R2's LAN stays passive by default."),
+  tkd('R3', 'R3: passive-interface default, with Gi0/0 and Gi0/1 re-enabled', ['router ospf 1', 'passive-interface default', 'no passive-interface gi0/0', 'no passive-interface gi0/1', 'exit'], s => G.ospfPassiveDefaultOn(s) && G.ospfNotPassiveOn(s, 'gi0/0') && G.ospfNotPassiveOn(s, 'gi0/1') && G.ospfPassiveOn(s, 'gi0/2'), "R3 has two OSPF-facing interfaces. Missing the second is the classic mistake after passive-interface default."),
+  tkd('R4', 'R4: passive-interface default, with Gi0/0 re-enabled', ['router ospf 1', 'passive-interface default', 'no passive-interface gi0/0', 'exit'], s => G.ospfPassiveDefaultOn(s) && G.ospfNotPassiveOn(s, 'gi0/0') && G.ospfPassiveOn(s, 'gi0/1'), "The branch LAN stays passive."),
+  tkd('R1', 'R1 Gi0/0 OSPF priority is 200', ['interface gi0/0', 'ip ospf priority 200', 'exit'], s => G.ospfPriorityIs(s, 'gi0/0', 200), "The highest priority wins the DR role. R1 is the router that should always be the DR on the shared segment."),
+  tkd('R3', 'R3 Gi0/0 OSPF priority is 0', ['interface gi0/0', 'ip ospf priority 0', 'exit'], s => G.ospfPriorityIs(s, 'gi0/0', 0), "Priority 0 means R3 can never be DR or BDR, even though it has the highest router-id on the segment among the remaining routers. That leaves R2 as the BDR."),
+  tkd('R3', 'R3 Gi0/1 is a point-to-point OSPF network with a manual cost of 50', ['interface gi0/1', 'ip ospf network point-to-point', 'ip ospf cost 50', 'exit'], s => G.ospfNetworkTypeIs(s, 'gi0/1', 'point-to-point') && G.ospfCostIs(s, 'gi0/1', 50), "Point-to-point skips the DR election on a two-router link. The manual cost 50 models a more expensive WAN-style link so traffic prefers cheaper paths where they exist."),
+  tkd('R4', 'R4 Gi0/0 is a point-to-point OSPF network', ['interface gi0/0', 'ip ospf network point-to-point'], s => G.ospfNetworkTypeIs(s, 'gi0/0', 'point-to-point'), "Both ends must use the same network type, otherwise the two routers run different rules on the same link."),
+  tkd('R1', 'R1 has a static default route via the ISP and originates it into OSPF', ['ip route 0.0.0.0 0.0.0.0 203.0.113.1', 'router ospf 1', 'default-information originate', 'exit'], s => G.hasDefaultRoute(s, '203.0.113.1') && G.ospfDefaultOriginateOn(s), "R1 needs its own default route before it can advertise one. default-information originate then shares it as an external type 2 route, so no other router needs a static default."),
+  tkd('R1', 'On 10.0.0.0/24, R1 is the DR and R2 is the BDR; R3 is a DROTHER', [], (s, all, sim) => sim.ifRole(s, 'gi0/0') === 'DR' && sim.ifRole(all.R2, 'gi0/0') === 'BDR' && sim.ifRole(all.R3, 'gi0/0') === 'DROTHER', "Verify with show ip ospf neighbor. R1 won on priority, and R2 beat R3 for BDR because R3 is ineligible with priority 0."),
+  tkd('R4', 'R4 learns the default route via R3 (10.0.34.1) as an external route', [], (s, all, sim) => { const r = sim.routeFor(s, '0.0.0.0/0'); return !!r && r.type === 'E2' && r.nextHops.some(h => h.ip === '10.0.34.1'); }, "The default route crosses the shared segment and the point-to-point link. On R4 it shows as O*E2 via R3's address on the link."),
+  tkd('R1', 'R1 reaches 192.168.4.0/24 via R3 (10.0.0.3) with cost 70', [], (s, all, sim) => route(s, sim, '192.168.4.0/24', '10.0.0.3', 70), "Add the outgoing costs: R1 Gi0/0 (10) + R3 Gi0/1 (the manual 50) + R4 LAN (10) = 70. This is the same arithmetic the exam asks for with show ip route."),
+  tkd('R4', 'R4 can ping R1 LAN gateway 192.168.1.1 (end-to-end connectivity)', [], (s, all, sim) => sim.ping(s, '192.168.1.1'), "A ping over the point-to-point link and the shared segment proves the adjacencies, the advertisements, and the routes all work together.")
+])
+);
+
+if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
 </script>
     <script>
         // ===== Top-level tab switching =====
@@ -4450,6 +5129,12 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
         let terminalHistory = [];
         let terminalHistoryPos = -1;
         let currentLabFilter = 'all';
+        // Multi-router labs keep one state, one session, and one scrollback per router.
+        let labStates = {};
+        let labCtxs = {};
+        let labDeviceKeys = [];
+        let currentDeviceKey = null;
+        let deviceScroll = {};
 
         function renderLabGrid() {
             document.getElementById('count-all').innerText = LABS.length;
@@ -4466,6 +5151,7 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
                 div.onclick = () => startLab(lab.id);
                 div.innerHTML = `<div class="lab-meta">
                         ${lab.isTroubleshooting ? '<span class="lab-badge trouble">🔧 Troubleshooting</span>' : ''}
+                        ${lab.devices ? '<span class="lab-badge multi">🔀 ' + lab.devices.length + ' routers</span>' : ''}
                         <span class="lab-badge diff-${lab.difficulty}">${lab.difficulty}</span>
                         <span class="lab-badge">${lab.domain}</span>
                         <span class="lab-badge">~${lab.est} min</span>
@@ -4486,8 +5172,21 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
 
         function startLab(labId) {
             currentLab = LABS.find(l => l.id === labId);
-            labState = currentLab.initial();
-            labCtx = newCtx();
+            if (currentLab.devices) {
+                labDeviceKeys = currentLab.devices.map(d => d.name);
+                labStates = {}; labCtxs = {};
+                currentLab.devices.forEach(d => { labStates[d.name] = d.initial(); labCtxs[d.name] = newCtx(); });
+                setSimHook(() => simulateOspf(labStates, currentLab.segments));
+            } else {
+                labDeviceKeys = ['_single'];
+                labStates = { _single: currentLab.initial() };
+                labCtxs = { _single: newCtx() };
+                setSimHook(null);
+            }
+            deviceScroll = {};
+            currentDeviceKey = labDeviceKeys[0];
+            labState = labStates[currentDeviceKey];
+            labCtx = labCtxs[currentDeviceKey];
             terminalHistory = [];
             terminalHistoryPos = -1;
 
@@ -4501,15 +5200,56 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
             reqList.innerHTML = currentLab.requirements.map(r => `<li>${escapeHtml(r)}</li>`).join('');
 
             document.getElementById('terminal-body').innerHTML = '';
-            if (currentLab.isTroubleshooting) {
+            if (currentLab.devices) {
+                appendTerminalRaw('This lab has ' + currentLab.devices.length + ' routers. Use the tabs above to switch between their consoles. Each router starts with a factory configuration and keeps its own session. Try: show ip ospf neighbor, show ip route, ping.');
+            } else if (currentLab.isTroubleshooting) {
                 appendTerminalRaw('⚠ This device already has a configuration loaded — something in it is broken. Run "show running-config" to inspect it before making changes.', 'terminal-line-error');
             } else {
                 appendTerminalRaw('Simulated IOS terminal ready. Type commands below (Enter to run, ↑/↓ for history, "?" to see available commands).');
             }
             renderObjectives([]);
+            renderDeviceTabs();
             updatePrompt();
             document.getElementById('terminal-input').value = '';
             document.getElementById('terminal-input').focus();
+        }
+
+        function renderDeviceTabs() {
+            const bar = document.getElementById('device-tabs');
+            bar.innerHTML = '';
+            if (!currentLab.devices) { bar.classList.add('hidden'); return; }
+            bar.classList.remove('hidden');
+            currentLab.devices.forEach(d => {
+                const b = document.createElement('button');
+                b.className = 'device-tab' + (d.name === currentDeviceKey ? ' active' : '');
+                b.innerText = d.label || d.name;
+                b.onclick = () => switchDevice(d.name);
+                bar.appendChild(b);
+            });
+        }
+
+        function switchDevice(key) {
+            if (!currentLab.devices || key === currentDeviceKey) return;
+            const body = document.getElementById('terminal-body');
+            deviceScroll[currentDeviceKey] = body.innerHTML;
+            currentDeviceKey = key;
+            labState = labStates[key];
+            labCtx = labCtxs[key];
+            body.innerHTML = deviceScroll[key] || '';
+            if (!deviceScroll[key]) appendTerminalRaw('Console of ' + key + '. Type commands below.');
+            renderDeviceTabs();
+            updatePrompt();
+            const input = document.getElementById('terminal-input');
+            input.value = '';
+            input.focus();
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function evalObjective(o, sim) {
+            try {
+                if (currentLab.devices) return !!o.check(labStates[o.dev || labDeviceKeys[0]], labStates, sim);
+                return !!o.check(labState);
+            } catch (e) { return false; }
         }
 
         function backToLabMenu() {
@@ -4523,7 +5263,7 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
         }
 
         function updatePrompt() {
-            document.getElementById('lab-device-name').innerText = labState.hostname;
+            document.getElementById('lab-device-name').innerText = labState.hostname + (currentLab && currentLab.devices ? '  ·  console of ' + currentDeviceKey : '');
             document.getElementById('terminal-prompt').innerText = promptFor(labState, labCtx);
         }
 
@@ -4566,7 +5306,7 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
                 li.className = 'obj-item' + (r && r.pass ? ' pass' : ' fail');
                 li.onclick = () => li.classList.toggle('show-hint');
                 const icon = r && r.pass ? '✓' : '○';
-                li.innerHTML = `<span class="obj-icon">${icon}</span>${escapeHtml(o.desc)}<div class="obj-hint"><div class="obj-hint-how"><span class="obj-hint-label">How:</span> ${escapeHtml(o.hint)}</div><div class="obj-hint-why"><span class="obj-hint-label">Why:</span> ${escapeHtml(o.why || '')}</div></div>`;
+                li.innerHTML = `<span class="obj-icon">${icon}</span>${o.dev ? '<span class="obj-dev">' + escapeHtml(o.dev) + '</span>' : ''}${escapeHtml(o.desc)}<div class="obj-hint"><div class="obj-hint-how"><span class="obj-hint-label">How:</span> ${escapeHtml(o.hint)}</div><div class="obj-hint-why"><span class="obj-hint-label">Why:</span> ${escapeHtml(o.why || '')}</div></div>`;
                 ul.appendChild(li);
             });
             const passCount = results.filter(r => r && r.pass).length;
@@ -4574,7 +5314,8 @@ if (typeof module !== 'undefined') { module.exports.LABS = LABS; }
         }
 
         function checkLabWork() {
-            const results = currentLab.objectives.map(o => ({ pass: !!o.check(labState) }));
+            const sim = currentLab.devices ? simulateOspf(labStates, currentLab.segments) : null;
+            const results = currentLab.objectives.map(o => ({ pass: evalObjective(o, sim) }));
             renderObjectives(results);
             const passCount = results.filter(r => r.pass).length;
             const total = results.length;
